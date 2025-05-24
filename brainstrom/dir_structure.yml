@@ -1,0 +1,50 @@
+# Multi-Agent Research Assistant Directory Structure
+
+research_assistant/
+├── README.md
+├── requirements.txt
+├── config/
+│   ├── __init__.py
+│   ├── settings.py
+│   └── mcp_config.yaml
+├── core/
+│   ├── __init__.py
+│   ├── orchestrator.py
+│   ├── memory_cache.py
+│   ├── validation_engine.py
+│   └── base_agent.py
+├── agents/
+│   ├── __init__.py
+│   ├── arxiv_agent.py
+│   ├── web_agent.py
+│   ├── document_agent.py
+│   └── media_agent.py
+├── mcp_server/
+│   ├── __init__.py
+│   ├── server.py
+│   ├── tool_registry.py
+│   └── communication.py
+├── tools/
+│   ├── __init__.py
+│   ├── arxiv_tools.py
+│   ├── web_tools.py
+│   ├── document_tools.py
+│   ├── media_tools.py
+│   └── nlp_tools.py
+├── data/
+│   ├── cache/
+│   ├── documents/
+│   ├── media/
+│   └── reports/
+├── utils/
+│   ├── __init__.py
+│   ├── logger.py
+│   ├── embeddings.py
+│   └── text_processing.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_orchestrator.py
+│   ├── test_memory.py
+│   └── test_validation.py
+└── main.py
+```

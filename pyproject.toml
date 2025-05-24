@@ -1,0 +1,13 @@
+[project]
+name = "agents-with-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chroma>=0.2.0",
+    "chromadb>=1.0.10",
+    "openai>=1.82.0",
+    "python-dotenv>=1.1.0",
+    "redis>=6.1.0",
+]
