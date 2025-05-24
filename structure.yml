@@ -1,5 +1,6 @@
 MCP servers:
-  - websearch
+  - web_search
+  - webpage_analyzer
   - research paper search
   - calculator
   - video analyser
