@@ -416,7 +416,7 @@ class WebResearchAgent:
     async def _execute_webpage_analysis(self, args, research_state: Dict) -> Dict[str, Any]:
 
         try:
-            analysis_response = await self.mcp_client.call_tool("webpage_analyzer", args)
+            analysis_response = await self.mcp_client.call_tool("analyze_webpage", args)
             
             if analysis_response.get("success"):
                 content = analysis_response.get("content", "")
@@ -452,7 +452,7 @@ class WebResearchAgent:
             
     async def _execute_url_validation(self, args, research_state: Dict) -> Dict[str, Any]:
         try:
-            validation_response = await self.mcp_client.call_tool("url_validator", args)
+            validation_response = await self.mcp_client.call_tool("validate_url", args)
             return validation_response
         except Exception as e:
             return {"success": False, "error": str(e)}
