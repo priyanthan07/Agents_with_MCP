@@ -8,7 +8,7 @@ from datetime import datetime
 from util.logger import get_logger
 from config import MCP_CONFIG
 
-from mcp import ClientSession, types
+from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 logger = get_logger(__name__)
@@ -54,10 +54,6 @@ class MCPClient:
     async def call_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         if not self.connected or not self.session:
             return {"success": False, "error": "Not connected to MCP server", "available_tools": "" }
-        
-        if tool_name not in self.available_tools:
-            logger.warning(f"Tool {tool_name} not available. Available tools: {list(self.available_tools.keys())}")
-            return {"success": False, "error": f"Tool {tool_name} not available", "available_tools": list(self.available_tools.keys())}
         
         try:
             result = await self.session.call_tool(tool_name, arguments=parameters)

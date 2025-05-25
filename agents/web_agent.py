@@ -18,6 +18,7 @@ class decisionTypes(str, Enum):
 
 class decisionOutputFormat(BaseModel):
     decision : decisionTypes
+    reasoning: str
 
 @dataclass
 class ReActStep:             # Represents one complete ReAct cycle
@@ -133,7 +134,7 @@ class WebResearchAgent:
             react_step = await self._execute_react_cycle(research_state)
             research_state["react_steps"].append(react_step)
             
-            if ("CONCLUDE" in react_step.reflection) or ("SUFFICIENT" in react_step.reflection):
+            if react_step.reflection == "CONCLUDE":
                 research_state["research_complete"] = True
                 logger.info("Agent decided to conclude ReAct loop and research")
                 
@@ -200,7 +201,7 @@ class WebResearchAgent:
         """
         try:
             
-            response = await self.client.responses.create(
+            response = await self.client.chat.completions.create(
                 model = OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "You are an expert researcher in the THOUGHT phase of ReAct. Provide clear, logical reasoning about what to do next."},
@@ -208,8 +209,8 @@ class WebResearchAgent:
                 ],
                 temperature=0.1
             )
-            
-            thought = response.output_text.strip()
+
+            thought = response.choices[0].message.content.strip()
             return thought
         
         except Exception as e:
@@ -237,7 +238,7 @@ class WebResearchAgent:
             You must call exactly one function based on your thought.
         """
         try:
-            response = self.client.responses.create(
+            response = self.client.chat.completions.create(
                 model=OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "You are in the ACTION phase. Choose and execute one tool based on your thought."},
@@ -299,7 +300,7 @@ class WebResearchAgent:
             Respond in 2-3 sentences that capture the key insights from this action.
         """
         try:
-            response = self.client.responses.create(
+            response = self.client.chat.completions.create(
                 model=OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "You are in the OBSERVATION phase. Interpret the action results and explain what you learned."},
@@ -308,7 +309,7 @@ class WebResearchAgent:
                 temperature=0.2
             )
             
-            observation = response.output_text.strip()
+            observation = response.choices[0].message.content.strip()
             return observation
             
         except Exception as e:
@@ -457,80 +458,6 @@ class WebResearchAgent:
         except Exception as e:
             return {"success": False, "error": str(e)}
             
-    async def _process_observation(self, action_result: Dict, research_state: Dict) -> str:
-        """
-            Process and understand the results of the action
-            This is the "Observation" phase of ReAct
-        """
-        action_type = action_result.get("action_type", "unknown")
-        
-        if action_type == "SEARCH":
-            if action_result["success"]:
-                return f"Found {action_result.get('new_results_count', 0)} new sources. Total sources: {action_result.get('total_results', 0)}"
-            else:
-                return f"Search failed: {action_result.get('error', 'Unknown error')}"
-            
-        elif action_type == "ANALYZE":
-            if action_result["success"]:
-                return f"Analyzed {action_result.get('analyzed_url', 'unknown URL')}. Found {action_result.get('new_findings', 0)} key findings."
-            else:
-                return f"Analysis failed: {action_result.get('error', 'Unknown error')}"
-            
-        elif action_type == "REFINE":
-            if action_result["success"]:
-                return f"Refined search with {len(action_result.get('refined_terms', []))} new terms, found {action_result.get('new_results', 0)} additional sources."
-            else:
-                return f"Search refinement failed: {action_result.get('error', 'Unknown error')}"
-            
-        elif action_type == "CONCLUDE":
-            return "Ready to conclude research and synthesize findings."
-        
-        else:
-            return f"Completed {action_type} action"
-        
-    async def _should_conclude_research(self, research_state: Dict) -> bool:
-        
-        has_enough_sources = len(research_state["analyzed_sources"]) >= 3
-        has_findings = len(research_state["key_findings"]) >= 5
-        max_iterations_reached = research_state["iteration"] >= self.max_iterations
-        
-        reflection_prompt = f"""
-            Evaluate whether the current research is sufficient to answer the original query.
-            
-            Original Query: {research_state['original_query']}
-            Sources Analyzed: {len(research_state['analyzed_sources'])}
-            Key Findings: {len(research_state['key_findings'])}
-            Current Iteration: {research_state['iteration']}/{self.max_iterations}
-            
-            Sample Findings: {research_state['key_findings'][:3]}
-            
-            Should we conclude the research now? Consider:
-            1. Quality and relevance of findings
-            2. Coverage of the research question
-            3. Confidence in the current evidence
-            
-            Respond with either "CONCLUDE" or "CONTINUE" and explain why.
-        """
-        try:
-            
-            response = await self.client.responses.parse(
-                model = OPENAI_CONFIG["default_model"],
-                messages=[
-                    {"role": "system", "content": "You are an expert research evaluator. Always respond with valid JSON."},
-                    {"role": "user", "content": reflection_prompt}
-                ],
-                text_format=decisionOutputFormat,
-                temperature=0.1
-            )
-            decision_result = json.loads(response.output_parsed)
-            should_conclude = (decision_result["decision"] == "CONCLUDE") or max_iterations_reached
-
-            logger.info(f"Research conclusion decision: {decision_result["decision"]}")
-            return should_conclude
-            
-        except Exception as e:
-            logger.error(f"Error generating thought: {e}")
-            return has_enough_sources and has_findings
         
     async def _extract_key_findings(self, content: str, query: str) -> List[str]:
         try:
@@ -552,7 +479,7 @@ class WebResearchAgent:
                 Return only the findings, one per line.
             """
             
-            response = await self.client.client.responses.create(
+            response = await self.client.chat.completions.create(
                 model=OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "You are an expert at extracting key research findings."},
@@ -561,7 +488,7 @@ class WebResearchAgent:
                 temperature=0.3
             )
             
-            findings_text = response.output_text.strip()
+            findings_text = response.choices[0].message.content.strip()
             findings = [f.strip() for f in findings_text.split('\n') if f.strip()]
             
             return findings[:5]  # Limit to 5 findings per source
@@ -600,7 +527,7 @@ class WebResearchAgent:
                 Keep the summary comprehensive but concise (300-500 words).
             """
             
-            response = await self.client.client.responses.create(
+            response = await self.client.chat.completions.create(
                 model=OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "Create a comprehensive research summary showing how ReAct methodology produced thorough results."},
@@ -609,7 +536,7 @@ class WebResearchAgent:
                 temperature=0.4
             )
             
-            summary = response.output_text.strip()
+            summary = response.choices[0].message.content.strip()
             
             # Determine research depth
             research_depth = self._determine_research_depth(research_state)
