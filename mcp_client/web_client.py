@@ -1,26 +1,17 @@
 import aiohttp
 import json
 import asyncio
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
-
-from utils.logger import get_logger
+from typing import Dict, Any, Optional, List
+from contextlib import AsyncExitStack
+import sys
+from datetime import datetime
+from util.logger import get_logger
 from config import MCP_CONFIG
 
+from mcp import ClientSession, StdioServerParameters, types
+from mcp.client.stdio import stdio_client
+
 logger = get_logger(__name__)
-
-@dataclass
-class MCPToolCall:
-    tool_name: str
-    parameters: Dict[str, Any]
-    timeout: int = 30
-
-@dataclass
-class MCPToolResult:
-    success: bool
-    result: Dict[str, Any]
-    error: Optional[str] = None
-    execution_time: float = 0.0
     
 class MCPClient:
     

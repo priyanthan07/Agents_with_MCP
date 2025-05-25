@@ -1,50 +1,52 @@
-# Multi-Agent Research Assistant Directory Structure
-
-research_assistant/
-├── README.md
-├── requirements.txt
-├── config/
-│   ├── __init__.py
-│   ├── settings.py
-│   └── mcp_config.yaml
-├── core/
-│   ├── __init__.py
-│   ├── orchestrator.py
-│   ├── memory_cache.py
-│   ├── validation_engine.py
-│   └── base_agent.py
-├── agents/
-│   ├── __init__.py
-│   ├── arxiv_agent.py
-│   ├── web_agent.py
-│   ├── document_agent.py
-│   └── media_agent.py
-├── mcp_server/
-│   ├── __init__.py
-│   ├── server.py
-│   ├── tool_registry.py
-│   └── communication.py
-├── tools/
-│   ├── __init__.py
-│   ├── arxiv_tools.py
-│   ├── web_tools.py
-│   ├── document_tools.py
-│   ├── media_tools.py
-│   └── nlp_tools.py
-├── data/
-│   ├── cache/
-│   ├── documents/
-│   ├── media/
-│   └── reports/
-├── utils/
-│   ├── __init__.py
-│   ├── logger.py
-│   ├── embeddings.py
-│   └── text_processing.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_orchestrator.py
-│   ├── test_memory.py
-│   └── test_validation.py
-└── main.py
-```
+    # research_assistant/
+    # ├── README.md
+    # ├── requirements.txt
+    # ├── config.py                    # Main configuration
+    # ├── .env                         # Environment variables
+    # ├── .env.example
+    # │
+    # ├── agents/                      # 🤖 Agent Components
+    # │   ├── __init__.py
+    # │   ├── web_agent.py            # Rule-based (old)
+    # │   ├── agentic_web_agent.py    # Truly agentic (new)
+    # │   ├── arxiv_agent.py          # Academic papers
+    # │   ├── document_agent.py       # Local documents
+    # │   └── media_agent.py          # Videos/images
+    # │
+    # ├── mcp_server/                  # 🛠️ MCP Tool Server
+    # │   ├── __init__.py
+    # │   ├── web_tools_server.py     # Web research tools
+    # │   ├── arxiv_tools_server.py   # Academic tools
+    # │   └── document_tools_server.py
+    # │
+    # ├── mcp_client/                  # 🔌 MCP Client Layer
+    # │   ├── __init__.py
+    # │   ├── web_client.py           # Enhanced client
+    # │   └── base_client.py
+    # │
+    # ├── src/                         # 🧠 Core Intelligence
+    # │   ├── __init__.py
+    # │   ├── orchestrator.py         # Multi-agent coordinator
+    # │   ├── memory_cache.py         # Smart caching
+    # │   └── validation_engine.py    # Contradiction detection
+    # │
+    # ├── utils/                       # 🔧 Utilities
+    # │   ├── __init__.py
+    # │   ├── logger.py
+    # │   ├── embeddings.py
+    # │   └── text_processing.py
+    # │
+    # ├── data/                        # 💾 Storage
+    # │   ├── cache/
+    # │   ├── chroma/                 # Vector database
+    # │   ├── documents/
+    # │   ├── media/
+    # │   └── reports/
+    # │
+    # ├── tests/                       # 🧪 Testing
+    # │   ├── test_integration.py
+    # │   ├── test_agents.py
+    # │   └── test_mcp.py
+    # │
+    # └── logs/                        # 📝 Logging
+    #     └── research_assistant.log

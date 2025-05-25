@@ -11,7 +11,7 @@ import numpy as np
 import openai
 from openai import OpenAI
 
-from utils.logger import get_logger
+from util.logger import get_logger
 from config import REDIS_CONFIG, CHROMA_CONFIG, OPENAI_CONFIG
 
 logger = get_logger(__name__)

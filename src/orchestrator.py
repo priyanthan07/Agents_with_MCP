@@ -8,7 +8,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from memory_cache import MemoryCacheLayer
-from utils.logger import get_logger
+from util.logger import get_logger
 from config import OPENAI_CONFIG, MCP_CONFIG
 
 logger = get_logger(__name__)
