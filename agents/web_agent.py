@@ -7,6 +7,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 from enum import Enum
 
+from mcp_client.web_client import create_mcp_client
 from util.logger import get_logger
 from config import OPENAI_CONFIG, MCP_CONFIG
 
@@ -55,11 +56,12 @@ class WebResearchAgent:
     """
         Web Research Agent that performs ReAct (Reasoning + Acting) loops to search, analyze, and synthesize web content for research queries.
     """
-    def __init__(self, mcp_client):
+    def __init__(self):
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
-        self.mcp_client = mcp_client  # MCP server client for tool access
-        self.max_iterations = 3       # Maximum ReAct loop iterations
-        self.max_sources = 10         # Maximum sources to analyze per query
+        
+        self.max_iterations = 3                     # Maximum ReAct loop iterations
+        self.max_sources = 10                       # Maximum sources to analyze per query
+        self.is_initialized = False
         
         self.available_tools = [
             {
@@ -110,6 +112,31 @@ class WebResearchAgent:
         ]
 
         logger.info("Web Research Agent initialized successfully")
+        
+    @classmethod
+    async def create(cls) -> 'WebResearchAgent':
+        agent = cls()
+        await agent._initialize_mcp_connection()
+        agent.is_initialized = True
+        return agent
+    
+    async def _initialize_mcp_connection(self):
+        try:
+            self.mcp_client = create_mcp_client()
+            await self.mcp_client.connect_to_server_and_setup()
+            
+            server_tools = [tool["name"] for tool in self.mcp_client.available_tools]
+            expected_tools = [tool["function"]["name"] for tool in self.available_tools]
+            
+            for expected_tool in expected_tools:
+                if expected_tool not in server_tools:
+                    logger.warning(f"Expected tool '{expected_tool}' not available from MCP server")
+            
+            logger.info(f"MCP connection established. Available tools in server : {server_tools}")
+        
+        except Exception as e:
+            logger.error(f"Failed to connect with web mcp client: {e}")
+            raise RuntimeError(e)
     
     async def research(self, task_query: str, context: List[Dict] = None) -> WebResearchResult:
         logger.info(f"Starting web research for query: {task_query}")
@@ -201,7 +228,7 @@ class WebResearchAgent:
         """
         try:
             
-            response = await self.client.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model = OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "You are an expert researcher in the THOUGHT phase of ReAct. Provide clear, logical reasoning about what to do next."},
@@ -210,7 +237,7 @@ class WebResearchAgent:
                 temperature=0.1
             )
 
-            thought = response.choices[0].message.content.strip()
+            thought = response.choices[0].message.content
             return thought
         
         except Exception as e:
@@ -367,7 +394,7 @@ class WebResearchAgent:
         try:
             response = self.client.responses.parse(
                 model=OPENAI_CONFIG["default_model"],
-                messages=[
+                input=[
                     {"role": "system", "content": "You are in the REFLECTION phase. Evaluate progress and decide whether to continue or conclude."},
                     {"role": "user", "content": reflection_prompt}
                 ],
@@ -375,7 +402,7 @@ class WebResearchAgent:
                 temperature=0.3
             )
             
-            reflection = json.loads(response.output_parsed)
+            reflection = json.loads(response.output[0].content[0].text)
             return reflection["decision"]
             
         except Exception as e:
@@ -385,10 +412,7 @@ class WebResearchAgent:
     async def _execute_web_search(self, args, research_state: Dict) -> Dict[str, Any]:
         try:
            
-            search_response = await self.mcp_client.call_tool(
-                "web_search",
-                args
-            )
+            search_response = await self.mcp_client.call_tool("web_search",args)
             
             new_results = []
             if search_response.get("success") and search_response.get("results"):
@@ -479,7 +503,7 @@ class WebResearchAgent:
                 Return only the findings, one per line.
             """
             
-            response = await self.client.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "You are an expert at extracting key research findings."},
@@ -527,7 +551,7 @@ class WebResearchAgent:
                 Keep the summary comprehensive but concise (300-500 words).
             """
             
-            response = await self.client.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=OPENAI_CONFIG["default_model"],
                 messages=[
                     {"role": "system", "content": "Create a comprehensive research summary showing how ReAct methodology produced thorough results."},
