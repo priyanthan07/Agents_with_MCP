@@ -123,7 +123,6 @@ class WebResearchAgent:
     async def _initialize_mcp_connection(self):
         try:
             self.mcp_client = create_mcp_client()
-            await self.mcp_client.connect_to_server_and_setup()
             
             server_tools = [tool["name"] for tool in self.mcp_client.available_tools]
             expected_tools = [tool["function"]["name"] for tool in self.available_tools]

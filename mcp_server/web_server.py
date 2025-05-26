@@ -1,3 +1,8 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import asyncio
 import requests
 import json
 from typing import Dict, List, Any, Optional
@@ -23,7 +28,21 @@ class ToolResult:
     tool_name: str = ""
     
 mcp = FastMCP("ReAct Web Research Tools Server", port=8001)
-tavily_client = AsyncTavilyClient(api_key=TAVILY_CONFIG["api_key"])
+
+
+# Global client variable - will be initialized in startup
+tavily_client = None
+
+async def initialize_tavily(): 
+    global tavily_client
+      
+    try:
+        tavily_client = AsyncTavilyClient(api_key=TAVILY_CONFIG["api_key"])
+        logger.info(" Tavily client initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to initialize Tavily client: {e}")
+        return False
 
 @mcp.tool()
 async def web_search(query: str, num_results: int = 10) -> dict:
@@ -70,7 +89,7 @@ async def web_search(query: str, num_results: int = 10) -> dict:
 async def analyze_webpage(url: str, extract_text: bool = True, summarize: bool = False) -> dict:
     try:
         extract_response = await tavily_client.extract(
-                    urls=['https://www.digitalocean.com/resources/articles/ai-trends'],                    # Can extract from multiple URLs
+                    urls=[url],                    # Can extract from multiple URLs
                     include_images=False,    
                     extract_depth="basic",         
                 )
@@ -82,7 +101,8 @@ async def analyze_webpage(url: str, extract_text: bool = True, summarize: bool =
             title = "Extracted Content"
                     
             logger.info(f" Tavily extraction successful for {url}")
-            summary = content[:1000] if content>1000 else content
+            if summarize:
+                summary = content[:1000] if content>1000 else content
             
             return {
                 "success": True,
@@ -130,6 +150,20 @@ async def validate_url(url: str) -> dict:
 def main():
     """Run the HTTP MCP server"""
     print("Starting MCP HTTP Server...")
+    
+    async def startup():
+        success = await initialize_tavily()
+        if success:
+            print(" Tavily initialized - enhanced search ready")
+        else:
+            print(" Tavily initialization failed - basic functionality only")
+    
+    # Run initialization
+    try:
+        asyncio.run(startup())
+    except Exception as e:
+        print(f"⚠️ Startup initialization error: {e}")
+    
     print("Available tools: web_search, analyze_webpage, validate_url")
     print("Press Ctrl+C to stop")
     print("-" * 60)
