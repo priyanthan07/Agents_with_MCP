@@ -65,11 +65,6 @@ async def test_web_agent():
         return False
 
 async def main():
-    try:
-        input()  # Wait for user confirmation
-    except KeyboardInterrupt:
-        print("\n👋 Test cancelled by user")
-        return
     
     # Run the actual test
     success = await test_web_agent()

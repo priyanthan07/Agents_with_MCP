@@ -1,17 +1,18 @@
-import asyncio
+import requests
 import json
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import aiohttp
-import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import re
 from dataclasses import dataclass, asdict
 from mcp.server.fastmcp import FastMCP
-# from util.logger import get_logger
+from util.logger import get_logger
+from config import TAVILY_CONFIG
+from tavily import AsyncTavilyClient
 
-# logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 @dataclass
 class ToolResult:
@@ -22,86 +23,77 @@ class ToolResult:
     tool_name: str = ""
     
 mcp = FastMCP("ReAct Web Research Tools Server", port=8001)
+tavily_client = AsyncTavilyClient(api_key=TAVILY_CONFIG["api_key"])
 
 @mcp.tool()
 async def web_search(query: str, num_results: int = 10) -> dict:
     try:
-        async with aiohttp.ClientSession() as session:
-            params = {
-                'q':query,
-                'format': 'json',
-                'no_html': '1'
-            }
+        response = await tavily_client.search(
+            query=query,                    
+            search_depth="advanced",        
+            max_results=min(num_results, 20),  
+            include_answer=True,           
+            include_raw_content=True,      
+            include_images=False,  
+            include_image_descriptions= True,
+            topic="general"                 
+        )
+        
+        results = []
+        for result in response["results"]:
             
-            async with session.get("https://api.duckduckgo.com/", params=params) as response:
-                
-                if response.status == 200:
-                    data = await response.json()
-                
-                    results = []
-                    if data["RelatedTopics"]:
-                        for topic in data["RelatedTopics"][:num_results]:
-                            if (isinstance(topic, dict)) and ('Text' in topic):
-                                results.append({
-                                    "url" : topic.get('FirstURL', ''),
-                                    "title" : topic.get('Text', '')[:100],
-                                    "snippet" : topic.get('Text', '')
-                                })
-                                
-                    # If no related topics, use abstract
-                    if (not results) and data['Abstract']:
-                        results.append({
-                            "url" : data.get('AbstractURL', ''),
-                            "title" : data.get('Heading', query),
-                            "snippet" : data.get('Abstract', '')
-                        })
-                    
-                    return {"success": True,"results": results}
-                    
-        return {"success": True,"results": []}        
+            content = result.get("content", "")
+            snippet = content[:500] if len(content) > 500 else content
+            
+            formatted_result = {
+                "url" : result.get("url", ""),
+                "title" : result.get("title", ""),
+                "snippet" : snippet
+            }
+            results.append(formatted_result)
+            
+        if response["answer"]:
+            summary = {
+                "url" : "",
+                "title" : "AI-Generated Research Summary",
+                "snippet" : response["answer"]
+            }
+            results.insert(0, summary)
+        logger.info(f" Tavily search for '{query}' returned {len(results)}")        
+        return {"success": True,"results": results}        
 
     except Exception as e:
+        logger.error(f"Unexpected error in web_search: {e}")
         return {"success": False,"error": str(e),"results": []}
     
 @mcp.tool()
 async def analyze_webpage(url: str, extract_text: bool = True, summarize: bool = False) -> dict:
     try:
-        async with aiohttp.ClientSession() as session:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        extract_response = await tavily_client.extract(
+                    urls=['https://www.digitalocean.com/resources/articles/ai-trends'],                    # Can extract from multiple URLs
+                    include_images=False,    
+                    extract_depth="basic",         
+                )
+        
+        if extract_response["result"] and len(extract_response["result"]) > 0:
+            result = extract_response["results"][0]
+            content = result.get("raw_content", "")
             
-            async with session.get(url, headers=headers) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    soup = BeautifulSoup(html, 'html.parser')
+            title = "Extracted Content"
                     
-                    title = soup.find('title')
-                    title_text = title.get_text().strip() if title else "No Title"
+            logger.info(f" Tavily extraction successful for {url}")
+            summary = content[:1000] if content>1000 else content
+            
+            return {
+                "success": True,
+                "title": title,
+                "content": content,
+                "summary": summary,
+                "word_count": len(content.split()) if content else 0
+            }
                     
-                    content = ""
-                    if extract_text:
-                        # Remove unwanted elements
-                        for element in soup(["script", "style", "nav", "header", "footer"]):
-                            element.decompose()
-                        
-                        main = soup.find('main') or soup.find('article') or soup.find('body')
-                        if main:
-                            content = main.get_text(separator=' ', strip=True)
-                            
-                    summary = ""
-                    if summarize and content:
-                        sentences = content.split('.')[:3]  # First 3 sentences
-                        summary = '. '.join(sentences).strip() + '.'
-                    
-                    return {
-                        "success": True,
-                        "title": title_text,
-                        "content": content,
-                        "summary": summary,
-                        "word_count": len(content.split()) if content else 0
-                    }
-                    
-                else:
-                    return {"success": False, "error": f"HTTP {response.status}"}      
+                # else:
+                #     return {"success": False, "error": f"HTTP {response.status}"}      
         
     except Exception as e:
         return {"success" : False, "error" : str(e)}
@@ -137,9 +129,9 @@ async def validate_url(url: str) -> dict:
         
 def main():
     """Run the HTTP MCP server"""
-    print("🚀 Starting MCP HTTP Server...")
-    print("🔧 Available tools: web_search, analyze_webpage, validate_url")
-    print("🛑 Press Ctrl+C to stop")
+    print("Starting MCP HTTP Server...")
+    print("Available tools: web_search, analyze_webpage, validate_url")
+    print("Press Ctrl+C to stop")
     print("-" * 60)
     
     try:
@@ -149,9 +141,9 @@ def main():
 
         )
     except KeyboardInterrupt:
-        print("\n🛑 Server stopped by user")
+        print("\n Server stopped by user")
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        print(f" Server error: {e}")
 
 if __name__ == "__main__":
     main()

@@ -10,26 +10,30 @@ OPENAI_CONFIG = {
     "temperature": 0.1,
 }
 
+TAVILY_CONFIG = {
+    "api_key" : os.getenv("TAVILY_API_KEY")
+}
+
 REDIS_CONFIG = {
-    "redis_host" : "localhost",
-    "redis_port" : 6379,
-    "redis_db" : 0
+    "redis_host" : os.getenv("REDIS_HOST"),
+    "redis_port" : os.getenv("REDIS_PORT"),
+    "redis_db" : os.getenv("REDIS_DB")
 }
 
 CHROMA_CONFIG = {
-    "chroma_persist_directory" : "./data/chroma_db"
+    "chroma_persist_directory" : os.getenv("CHROMA_PERSIST_DIRECTORY")
 }
 
 MCP_CONFIG = {
     "servers": {
         "web_research": {
-            "url": "http://127.0.0.1:8001/mcp"
+            "url": os.getenv("MCP_WEB_RESEARCH_URL")
         },
         "arxiv_research": {
-            "url": "http://127.0.0.1:8002/mcp"
+            "url": os.getenv("MCP_ARXIV_RESEARCH_URL")
         },
         "document_analysis": {
-            "url": "http://127.0.0.1:8003/mcp"
+            "url": os.getenv("MCP_DOCUMENT_ANALYSIS_URL")
         }
     },
     "default_server": "web_research",
