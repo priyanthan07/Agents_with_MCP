@@ -49,8 +49,6 @@ class MCPClient:
             raise      
     
     async def call_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        if not self.tools_discovered:
-            await self._ensure_tools_discovered()
         
         try:
             async with streamablehttp_client(self.server_url) as (read, write, _):

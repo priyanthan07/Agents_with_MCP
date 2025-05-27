@@ -50,7 +50,6 @@ class WebResearchResult:
     research_depth: str  # "SURFACE", "MODERATE", "DEEP"
     react_trace: List[ReActStep]
     metadata: Dict[str, Any]
-        
     
 class WebResearchAgent:
     """
@@ -59,8 +58,7 @@ class WebResearchAgent:
     def __init__(self):
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
         
-        self.max_iterations = 3                     # Maximum ReAct loop iterations
-        self.max_sources = 10                       # Maximum sources to analyze per query
+        self.max_iterations = 5                     # Maximum ReAct loop iterations
         self.is_initialized = False
         
         self.available_tools = [
@@ -123,6 +121,8 @@ class WebResearchAgent:
     async def _initialize_mcp_connection(self):
         try:
             self.mcp_client = create_mcp_client()
+            
+            await self.mcp_client._ensure_tools_discovered()
             
             server_tools = [tool["name"] for tool in self.mcp_client.available_tools]
             expected_tools = [tool["function"]["name"] for tool in self.available_tools]
