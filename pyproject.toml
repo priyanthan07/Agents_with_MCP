@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.11.18",
+    "arxiv>=2.2.0",
     "bs4>=0.0.2",
     "chroma>=0.2.0",
     "chromadb>=1.0.10",
