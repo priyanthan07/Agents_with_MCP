@@ -6,7 +6,7 @@ from datetime import datetime
 from openai import OpenAI
 from pydantic import BaseModel
 
-from mcp_client.arxiv_client import create_mcp_client
+from mcp_client.client import create_mcp_client
 from util.logger import get_logger
 from config import OPENAI_CONFIG
 
@@ -54,7 +54,7 @@ class ArxivResearchAgent:
     async def _initialize_mcp_connection(self):
         try:
             self.mcp_client = create_mcp_client()
-            await self.mcp_client._ensure_tools_discovered()
+            await self.mcp_client._initialize_client(server="arxiv_research") 
             
             server_tools = [tool["name"] for tool in self.mcp_client.available_tools]
             expected_tools = self.available_tools

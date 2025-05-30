@@ -16,18 +16,21 @@ logger = get_logger(__name__)
 class MCPClient:
     
     def __init__(self):
-        self.servers_config = MCP_CONFIG["servers"]["web_research"]
-        self.server_url = self.servers_config["url"]
+        self.server_url = None
         self.available_tools: List[Dict[str, Any]] = []
         self.tools_discovered = False
-        
-        logger.info(f"MCP Web Client initialized with server URL: {self.server_url}")
             
-    async def _ensure_tools_discovered(self):
+    async def _initialize_client(self, server: str):
         if self.tools_discovered:
             return 
         
         try:
+            servers_config = MCP_CONFIG["servers"][server]
+            self.server_url = servers_config["url"]
+            
+            logger.info(f"Initialize MCP Web Client of {server}server and URL: {self.server_url}")
+            
+            # discover tools
             async with streamablehttp_client(self.server_url) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()

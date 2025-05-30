@@ -43,6 +43,10 @@ async def initialize_tavily():
 
 @mcp.tool()
 async def web_search(query: str, num_results: int = 10) -> dict:
+    
+    if not tavily_client:
+        return {"success": False, "error": "Tavily client not initialized", "results": []}
+    
     try:
         response = await tavily_client.search(
             query=query,                    
@@ -85,6 +89,9 @@ async def web_search(query: str, num_results: int = 10) -> dict:
 @mcp.tool()
 async def analyze_webpage(url: str, extract_text: bool = True, summarize: bool = True) -> dict:
     
+    if not tavily_client:
+        return {"success": False, "error": "Tavily client not initialized", "results": []}
+    
     try:
         extract_response = await tavily_client.extract(
                     urls=[url],                    # Can extract from multiple URLs
@@ -109,39 +116,16 @@ async def analyze_webpage(url: str, extract_text: bool = True, summarize: bool =
                 "summary": summary,
                 "word_count": len(content.split()) if content else 0
             }
+        else:
+            {
+                "success": False,
+                "error": "No content extracted from URL",
+                "url": url
+            }
                        
         
     except Exception as e:
         return {"success" : False, "error" : str(e)}
-    
-@mcp.tool()
-async def validate_url(url: str) -> dict:
-    try:
-        parsed = urlparse(url)
-        if not parsed.scheme or not parsed.netloc:
-            return {
-                "success": True,
-                "valid": False,
-                "accessible": False,
-                "error": "Invalid URL format"
-            }
-        
-        # Check if URL is accessible
-        async with aiohttp.ClientSession() as session:
-            async with session.head(url, allow_redirects=True) as response:
-                return {
-                    "success": True,
-                    "valid": True,
-                    "accessible": response.status < 400,
-                    "status_code": response.status
-                }
-                
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"Tool execution failed: {str(e)}",
-            "url_checked": url
-        }
         
 def main():
     

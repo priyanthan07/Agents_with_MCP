@@ -7,7 +7,6 @@ load_dotenv()
 
 # Import your components
 from agents.web_agent import WebResearchAgent
-from mcp_client.web_client import create_mcp_client
 
 async def test_web_agent():
     print("🧪 Starting Web Agent Test...")

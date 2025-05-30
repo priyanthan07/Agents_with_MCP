@@ -7,7 +7,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 from enum import Enum
 
-from mcp_client.web_client import create_mcp_client
+from mcp_client.client import create_mcp_client
 from util.logger import get_logger
 from config import OPENAI_CONFIG, MCP_CONFIG
 
@@ -92,20 +92,6 @@ class WebResearchAgent:
                         "required": ["url"]
                     }
                 }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "validate_url",
-                    "description": "Check if a URL is accessible. Use before analyzing potentially problematic URLs.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string", "description": "URL to validate"}
-                        },
-                        "required": ["url"]
-                    }
-                }
             }
         ]
 
@@ -121,8 +107,7 @@ class WebResearchAgent:
     async def _initialize_mcp_connection(self):
         try:
             self.mcp_client = create_mcp_client()
-            
-            await self.mcp_client._ensure_tools_discovered()
+            await self.mcp_client._initialize_client(server="web_research")
             
             server_tools = [tool["name"] for tool in self.mcp_client.available_tools]
             expected_tools = [tool["function"]["name"] for tool in self.available_tools]
@@ -224,6 +209,7 @@ class WebResearchAgent:
             
             Think step-by-step about your reasoning. What should you do next and why?
             Respond with your thought process in 2-3 sentences that clearly explain your reasoning.
+            make sure the current year is 2025. 
         """
         try:
             
@@ -257,11 +243,11 @@ class WebResearchAgent:
             Available actions:
             1. web_search(query, num_results) - Search for information online
             2. analyze_webpage(url, extract_text, summarize) - Analyze a specific webpage
-            3. validate_url(url) - Check if a URL is accessible
             
             Based on your thought, which action should you take? Choose the action that directly addresses your reasoning.
             
             You must call exactly one function based on your thought.
+            make sure the current year is 2025. 
         """
         try:
             response = self.client.chat.completions.create(
@@ -284,9 +270,6 @@ class WebResearchAgent:
             
             elif action_name == "analyze_webpage":
                 result = await self._execute_webpage_analysis(action_params, research_state)
-            
-            elif action_name == "validate_url":
-                result = await self._execute_url_validation(action_params)
             
             else:
                 result = {"error": f"Unknown action: {action_name}"}
@@ -324,6 +307,7 @@ class WebResearchAgent:
             Provide a clear observation about what you learned from this action. Focus on the meaning and implications, not just repeating the raw results.
             
             Respond in 2-3 sentences that capture the key insights from this action.
+            make sure the current year is 2025. 
         """
         try:
             response = self.client.chat.completions.create(
@@ -471,13 +455,6 @@ class WebResearchAgent:
             else:
                 return {"success": False, "error": analysis_response.get("error", "Analysis failed")}
                 
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-            
-    async def _execute_url_validation(self, args, research_state: Dict) -> Dict[str, Any]:
-        try:
-            validation_response = await self.mcp_client.call_tool("validate_url", args)
-            return validation_response
         except Exception as e:
             return {"success": False, "error": str(e)}
             
