@@ -13,9 +13,11 @@ source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "arxiv" },
+    { name = "assemblyai" },
     { name = "bs4" },
     { name = "chroma" },
     { name = "chromadb" },
+    { name = "google-genai" },
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
     { name = "openai" },
@@ -27,9 +29,11 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
     { name = "arxiv", specifier = ">=2.2.0" },
+    { name = "assemblyai", specifier = ">=0.40.2" },
     { name = "bs4", specifier = ">=0.0.2" },
     { name = "chroma", specifier = ">=0.2.0" },
     { name = "chromadb", specifier = ">=1.0.10" },
+    { name = "google-genai", specifier = ">=1.18.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.9.1" },
     { name = "openai", specifier = ">=1.82.0" },
@@ -150,6 +154,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/29/38/b3395cc9ad1b56d2ddac9970bc8f4141312dbaec28bc7c218b0dfafd0f42/asgiref-3.8.1.tar.gz", hash = "sha256:c343bd80a0bec947a9860adb4c432ffa7db769836c64238fc34bdc3fec84d590", size = 35186 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/e3/893e8757be2612e6c266d9bb58ad2e3651524b5b40cf56761e985a28b13e/asgiref-3.8.1-py3-none-any.whl", hash = "sha256:3e1e3ecc849832fe52ccf2cb6686b7a55f82bb1d6aee72a58826471390335e47", size = 23828 },
+]
+
+[[package]]
+name = "assemblyai"
+version = "0.40.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/f1/ef2ec1b11114b8ef687037a050fbd3e6526ad4b7de8ac501efb004f18e21/assemblyai-0.40.2.tar.gz", hash = "sha256:026cb7ba6c7c0987eee57fe67f183f8cd8fec48237539400cbdf91203fe8b5fd", size = 49994 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/23/c8762b2a2ef46ab14ccb2ad217baa76bd14dd706ed3a22c6ed6252fb4c23/assemblyai-0.40.2-py3-none-any.whl", hash = "sha256:8e336c0c857a7937311b4a2d1bfb50e259e1d2b225c45e6b115a3b4bc6039f60", size = 44833 },
 ]
 
 [[package]]
@@ -549,6 +568,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/84/f67f53c505a6b2c5da05c988e2a5483f5ba9eee4b1841d2e3ff22f547cd5/google_auth-2.40.2.tar.gz", hash = "sha256:a33cde547a2134273226fa4b853883559947ebe9207521f7afc707efbf690f58", size = 280990 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/c7/e2d82e6702e2a9e2311c138f8e1100f21d08aed0231290872b229ae57a86/google_auth-2.40.2-py2.py3-none-any.whl", hash = "sha256:f7e568d42eedfded58734f6a60c58321896a621f7c116c411550a4b4a13da90b", size = 216102 },
+]
+
+[[package]]
+name = "google-genai"
+version = "1.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "google-auth" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "typing-extensions" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d2/c2/4dac4192aa3f1273d117b54002bde9df565becd0fb5489ec1f58777ce2a3/google_genai-1.18.0.tar.gz", hash = "sha256:242a02df3248e291f03e37019ce5a1c8a21a14ec245b59668c9f2b4d8965295e", size = 197394 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/db/dce044ddf3f272248aa517fb8e525b31685b483210a8e08773596dbcc611/google_genai-1.18.0-py3-none-any.whl", hash = "sha256:3527bb93c8306e725401aca0a0a684610bbf1ef9aa61c2ed3333a695f43dc9af", size = 199485 },
 ]
 
 [[package]]

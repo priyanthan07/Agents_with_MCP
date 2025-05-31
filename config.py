@@ -14,6 +14,14 @@ TAVILY_CONFIG = {
     "api_key" : os.getenv("TAVILY_API_KEY")
 }
 
+GEMINI_CONFIG = {
+    "api_key" : os.getenv("GEMINI_API_KEY")
+}
+
+ASSEMBLYAI_CONFIG = {
+    "api_key" : os.getenv("ASSEMBLYAI_API_KEY")
+}
+
 REDIS_CONFIG = {
     "redis_host" : os.getenv("REDIS_HOST"),
     "redis_port" : os.getenv("REDIS_PORT"),
@@ -32,11 +40,23 @@ MCP_CONFIG = {
         "arxiv_research": {
             "url": os.getenv("MCP_ARXIV_RESEARCH_URL")
         },
-        "document_analysis": {
-            "url": os.getenv("MCP_DOCUMENT_ANALYSIS_URL")
+        "multimodal_analysis": {
+            "url": os.getenv("MCP_MULTIMODAL_ANALYSIS_URL")
         }
     },
     "default_server": "web_research",
     "connection_timeout": 30,
     "retry_attempts": 3
+}
+
+# multimodal research
+SUPPORTED_EXTENSIONS = {
+    '.mp4', '.mpeg', '.avi', '.mov', '.wmv', '.x-flv', '.webm', '.mpg', '.3gpp'  # video
+    '.mp3', '.wav', '.aiff', '.flac', '.aac', '.ogg',                            # audio
+    '.jpeg', '.png', '.heic', '.heif', '.webp',                                  # image
+    '.pdf', '.csv', '.md', '.txt', '.html', '.css', '.xml'                       # document
+}
+
+DATA_DIRECTORY_CONFIG = {
+    "path" : os.getenv("DATA_DIRECTORY_PATH")
 }
