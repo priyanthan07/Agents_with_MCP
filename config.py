@@ -50,12 +50,12 @@ MCP_CONFIG = {
 }
 
 # multimodal research
-SUPPORTED_EXTENSIONS = {
-    '.mp4', '.mpeg', '.avi', '.mov', '.wmv', '.x-flv', '.webm', '.mpg', '.3gpp'  # video
+SUPPORTED_EXTENSIONS = [
+    '.mp4', '.mpeg', '.avi', '.mov', '.wmv', '.x-flv', '.webm', '.mpg', '.3gpp',  # video
     '.mp3', '.wav', '.aiff', '.flac', '.aac', '.ogg',                            # audio
     '.jpeg', '.png', '.heic', '.heif', '.webp',                                  # image
     '.pdf', '.csv', '.md', '.txt', '.html', '.css', '.xml'                       # document
-}
+]
 
 DATA_DIRECTORY_CONFIG = {
     "path" : os.getenv("DATA_DIRECTORY_PATH")

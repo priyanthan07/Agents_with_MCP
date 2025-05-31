@@ -71,7 +71,7 @@ class MultiModalResearchAgent:
     async def _initialize_mcp_connection(self):
         try:
             self.mcp_client = create_mcp_client()
-            await self.mcp_client._initialize_client(server="multimodal_research") 
+            await self.mcp_client._initialize_client(server="multimodal_analysis") 
             
             server_tools = [tool["name"] for tool in self.mcp_client.available_tools]
             expected_tools = self.available_tools
@@ -94,6 +94,8 @@ class MultiModalResearchAgent:
         
         # Step 2: Organize files by type
         files_by_type = self._organize_files_by_type(discovered_files)
+        
+        logger.info(f" Existing files : {files_by_type}")
         
         # Step 3: Process each type sequentially
         all_results = []
@@ -135,13 +137,14 @@ class MultiModalResearchAgent:
     async def _scan_directory(self) -> List[MediaFile]:
         try:
             if not os.path.exists(self.data_directory):
-                return {"success": False, "error": f"Directory not found: {self.directory_path}", "files": []}
+                return {"success": False, "error": f"Directory not found: {self.data_directory}", "files": []}
             
             discovered_files = []
-            for root, dirs, files in os.walk(self.directory_path):
+            for root, dirs, files in os.walk(self.data_directory):
                 for file in files:
                     file_path = os.path.join(root, file)
                     file_ext = Path(file).suffix.lower()
+                    logger.info(f"file : {file}")
                     
                     if file_ext in SUPPORTED_EXTENSIONS:
                         try:
@@ -354,9 +357,8 @@ class MultiModalResearchAgent:
             for result in results:
                 if result.success:
                     if result.file_type not in content_by_type:
-                        if result.file_type not in content_by_type:
-                            content_by_type[result.file_type] = []
-                        content_by_type[result.file_type].append(result.content_extracted[:500])
+                        content_by_type[result.file_type] = []
+                    content_by_type[result.file_type].append(result.content_extracted[:500])
                         
             prompt = f"""
                 Create a comprehensive research synthesis for: {query}
