@@ -58,7 +58,7 @@ class WebResearchAgent:
     def __init__(self):
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
         
-        self.max_iterations = 5                     # Maximum ReAct loop iterations
+        self.max_iterations = 3                 # Maximum ReAct loop iterations
         self.is_initialized = False
         
         self.available_tools = [

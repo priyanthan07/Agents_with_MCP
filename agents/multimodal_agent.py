@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 class MediaFile:
     file_path: str
     file_type: str       # "video", "audio", "image", "document"
-    mime_type: str
+    mime_type: str       # Multipurpose Internet Mail Extension
     file_size: int
     
 @dataclass
@@ -56,7 +56,7 @@ class MultiModalResearchAgent:
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
         self.data_directory = DATA_DIRECTORY_CONFIG["path"]
         self.is_initialized = False
-        self.available_tools = []
+        self.available_tools = ["process_video_file", "process_audio_file", "process_image_file", "process_document_file"]
         self.processing_order = ["video", "image", "audio", "document"]
         
         logger.info(f"Sequential Multi-Modal Agent initialized.")
