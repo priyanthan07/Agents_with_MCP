@@ -3,392 +3,431 @@ import json
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
-import openai
 from openai import OpenAI
 from pydantic import BaseModel
-
+import uuid
 from memory_cache import MemoryCacheLayer
 from util.logger import get_logger
-from config import OPENAI_CONFIG, MCP_CONFIG
+from config import OPENAI_CONFIG
+
+from agents.web_agent import WebResearchAgent, WebResearchResult
+from agents.arxiv_agent import ArxivResearchAgent, GlobalResearchResult
+from agents.multimodal_agent import MultiModalResearchAgent, MultiModalResearchResult
+
+from memory_cache import MemoryCacheLayer
+from validator import ResearchValidator
 
 logger = get_logger(__name__)
 
-class decomposedTask(BaseModel):
-    agent: str
-    specific_query : str
-    priority : int
+@dataclass
+class Contradiction:
+    id: str
+    source1: str
+    source2: str
+    claim1: str
+    claim2: str
+    topic: str
+    severity: str
     
-class tasksOutputFormat(BaseModel):
-    tasks : List[decomposedTask]
-    validation_requirements : List[str]
+@dataclass
+class Resolution:
+    contradiction_id: str
+    resolution_query: str
+    evidence: str
+    conclusion: str
+    confidence: float
     
-class validationTask(BaseModel):
-    agent: str
-    query : str
-    focus : int
+@dataclass
+class ValidationResult:
+    contradictions_found: List[Contradiction]
+    resolutions_needed: List[str]
+    validation_summary: str
 
 @dataclass
-class ResearchTask:
-    task_id: str
-    agent_type: str
-    query: str
-    priority: int
-    status: str = "PENDING"     # PENDING, IN_PROGRESS, COMPLETED, FAILED
-    created_at: datetime = datetime.now()
-    result: Optional[Dict] = None
-    confidence_score: float = 0.0
-    
+class AgentExecutionResult:
+    web_result: Optional[Any] = None
+    arxiv_result: Optional[Any] = None
+    multimodal_result: Optional[Any] = None
+    execution_errors: List[str] = None
+
 @dataclass
-class ResearchPlan:
-    plan_id: str
-    original_query: str
-    decomposed_tasks: List[ResearchTask]
-    validation_requirements: List[str]
-    estimated_time: int
-    created_at: datetime = datetime.now()
+class CachedData:
+    web_result: Optional[Dict[str, Any]]
+    arxiv_result: Optional[Dict[str, Any]]
+    multimodal_result: Optional[Dict[str, Any]]
+    contradictions: List[Dict[str, Any]]
+    resolutions: List[Dict[str, Any]]
+    executive_summary: str
+    detailed_analysis: str
+
+@dataclass
+class ResearchReport:
+    task_id: str
+    query: str
+    methodology: str
+    web_insights: List[str]
+    academic_insights: List[str]
+    media_insights: List[str]
+    contradictions_found: List[Contradiction]
+    resolutions: List[Resolution]
+    executive_summary: str
+    detailed_analysis: str
+    sources_analyzed: int
+    timestamp: datetime
+    used_cache: bool = False
+
+class SynthesizeTask(BaseModel):
+    EXECUTIVE_SUMMARY: str
+    DETAILED_ANALYSIS : str
     
 class OrchestratorAgent:
     def __init__(self, memory_cache: MemoryCacheLayer, validation_engine):
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
-        self.memory_cache = memory_cache
-        self.validation_engine = validation_engine
-        self.mcp_server_url = MCP_CONFIG["mcp_server_url"]
+        self.memory_cache = MemoryCacheLayer()
+        self.validator = ResearchValidator()
+        self.is_initialized = False
         
-        self.active_plans = Dict[str, ResearchPlan] = {}
-        self.agent_status : Dict[str, str] = {
-            "arxiv_agent": "IDLE",
-            "web_agent": "IDLE", 
-            "document_agent": "IDLE",
-            "media_agent": "IDLE"
-        }
+        logger.info("Orchestrator Agent initialized successfully")
         
-        self.agent_capabilities = {
-            "arxiv_agent": ["Searches academic papers", "analyzes citations", "finds research methodology"],
-            "web_agent": ["Searches current web content", "news", "industry reports", "real-time information"],
-            "document_agent": ["Analyzes local documents", "PDFs", "internal reports"],
-            "media_agent": ["Processes videos", "images", "presentations for visual information"]
-        }
-        
-    async def process_research_query(self, query: str, user_context: Dict[str, Any] = None) -> str:
-        logger.info(f"Processing new research query: {query}")
-        
-        cached_results = await self.memory_cache.check_similar_queries(query)
-        research_plan = await self._decompose_query(query, cached_results, user_context)
-        
-        self.active_plans[research_plan.plan_id] = research_plan
-        
-        # parallel agent execution
-        await self._execute_research_plan(research_plan.plan_id)
-        
-        return research_plan.plan_id
-    
-    async def _decompose_query(self, query: str, cached_results: List[Dict], user_context: Dict[str, Any] = None) -> ResearchPlan:
-        """
-            Use LLM to decompose the query into specific tasks
-        """
-        
-        prompt = f"""
-            You are a research coordinator tasked with breaking down a complex research query into specific tasks for different specialized agents.
-            Research Query: {query}
+    async def initialize(self):
+        try:
+            self.web_agent = await WebResearchAgent.create()
+            self.arxiv_agent = await ArxivResearchAgent.create()
+            self.multimodal_agent = await MultiModalResearchAgent.create()
             
-            Availabe agents and it's capabilities : {self.agent_capabilities}
+            self.is_initialized = True
+            logger.info("Orchestrator initialized successfully")
             
-            Cached Information Available: {json.dumps(cached_results, indent=2) if cached_results else None}
-            
-            Please decompose this query into specific, actionable tasks for each relevant agent. For each task, specify:
-            1. Which agent should handle it
-            2. Specific search terms or focus areas
-            3. Priority level (1-5, where 5 is highest)
-            
-            Also mention the What type of validation might be needed for the retrived data from different sources. For example ['cross_source_verification', 'temporal_consistency']
-            
-            Return your response in given JSON structure with tasks and validation requirements.
-        """
+        except Exception as e:
+            logger.error(f"Failed to initialize orchestrator: {e}")
+            raise RuntimeError(f"Initialization failed: {e}")
+        
+    async def research(self, query: str) -> ResearchReport:
+        if not self.is_initialized:
+            await self.initialize()
+
+        logger.info(f"Starting research for: {query}")
         
         try:
-            response = await self.client.responses.parse(
-                model = OPENAI_CONFIG["default_model"],
-                messages=[
-                    {"role": "system", "content": "You are an expert research coordinator.Always respond with valid JSON."},
+            similar_task_id = await self.memory_cache.find_similar_query(query)
+            if similar_task_id:
+                logger.info(f"Using cached data from task_id: {similar_task_id}")
+                return await self._generate_report_from_cache(query, similar_task_id)
+            
+            else:
+                logger.info("No similar query found - executing full research")
+                return await self._execute_full_research(query)
+            
+        except Exception as e:
+            logger.error(f"Error in research: {e}")
+            return self._create_error_report(query, str(e))
+        
+    async def _generate_report_from_cache(self, query: str, task_id: str) -> ResearchReport:
+        try:
+            cached_data_dict = await self.memory_cache.retrieve_task_data(task_id)
+            if not cached_data_dict:
+                logger.warning("No cached data found, falling back to full research")
+                return await self._execute_full_research(query)
+            
+            cached_data = CachedData(
+                web_result=cached_data_dict["web_result"],
+                arxiv_result=cached_data_dict["arxiv_result"],
+                multimodal_result=cached_data_dict["multimodal_result"],
+                contradictions=cached_data_dict.get("contradictions", []),
+                resolutions=cached_data_dict.get("resolutions", []),
+                executive_summary=cached_data_dict.get("executive_summary", ""),
+                detailed_analysis=cached_data_dict.get("detailed_analysis", "")
+            )
+            
+            if not cached_data.executive_summary:
+                executive_summary, detailed_analysis = await self._synthesize_report(
+                    query, cached_data.web_result, cached_data.arxiv_result, cached_data.multimodal_result, [Contradiction(**c) for c in cached_data.contradictions], [Resolution(**r) for r in cached_data.resolutions]
+                )
+            else:
+                executive_summary = cached_data.executive_summary
+                detailed_analysis = cached_data.detailed_analysis
+
+            return ResearchReport(
+                task_id=task_id,
+                query=query,
+                methodology="Cached Results (Similarity Match)",
+                web_insights=self._extract_insights(cached_data.web_result, "web"),
+                academic_insights=self._extract_insights(cached_data.arxiv_result, "arxiv"),
+                media_insights=self._extract_insights(cached_data.multimodal_result, "media"),
+                contradictions_found=[Contradiction(**c) for c in cached_data.contradictions],
+                resolutions=[Resolution(**r) for r in cached_data.resolutions],
+                executive_summary=executive_summary,
+                detailed_analysis=detailed_analysis,
+                sources_analyzed=self._count_sources_from_dict(cached_data.web_result, cached_data.arxiv_result, cached_data.multimodal_result),
+                timestamp=datetime.now(),
+                used_cache=True
+            )
+            
+        except Exception as e:
+            logger.error(f"Error generating cached report: {e}")
+            return await self._execute_full_research(query)
+        
+    async def _execute_full_research(self, query: str) -> ResearchReport:
+        task_id = str(uuid.uuid4())
+        try:
+            # Step 1: Execute all agents in parallel
+            logger.info("Executing all agents in parallel")
+            execution_result = await self._execute_agents_parallel(query)
+            
+            # Step 2: Detect contradictions
+            logger.info("Detecting contradictions")
+            contradictions = await self.validator.detect_contradictions({
+                "web_result": execution_result.web_result,
+                "arxiv_result": execution_result.arxiv_result,
+                "multimodal_result": execution_result.multimodal_result
+            })
+            
+            # Step 3: Resolve contradictions using web search
+            resolutions = []
+            if contradictions:
+                logger.info(f"Resolving {len(contradictions)} contradictions")
+                resolutions = await self._resolve_contradictions(contradictions)
+            
+            # Step 4: Generate final report
+            executive_summary, detailed_analysis = await self._synthesize_report(
+                query, execution_result.web_result, execution_result.arxiv_result, execution_result.multimodal_result, contradictions, resolutions
+            )
+            
+            # Step 5: Store in cache
+            await self._store_research_in_cache(query, task_id, CachedData(
+                web_result = execution_result.web_result.__dict__ if execution_result.web_result else None,
+                arxiv_result=execution_result.arxiv_result.__dict__ if execution_result.arxiv_result else None,
+                multimodal_result=execution_result.multimodal_result.__dict__ if execution_result.multimodal_result else None,
+                contradictions=[c.__dict__ for c in contradictions],
+                resolutions=[r.__dict__ for r in resolutions],
+                executive_summary=executive_summary,
+                detailed_analysis=detailed_analysis
+            ))
+            
+            return ResearchReport(
+                task_id=task_id,
+                query=query,
+                methodology="Full Research Pipeline with Validation",
+                web_insights=self._extract_insights(execution_result.web_result, "web"),
+                academic_insights=self._extract_insights(execution_result.arxiv_result, "arxiv"),
+                media_insights=self._extract_insights(execution_result.multimodal_result, "media"),
+                contradictions_found=contradictions,
+                resolutions=resolutions,
+                executive_summary=executive_summary,
+                detailed_analysis=detailed_analysis,
+                sources_analyzed=self._count_sources(execution_result.web_result, execution_result.arxiv_result, execution_result.multimodal_result),
+                timestamp=datetime.now(),
+                used_cache=False
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in full research: {e}")
+            return self._create_error_report(query, str(e))
+        
+    async def _execute_agents_parallel(self, query: str) -> AgentExecutionResult:
+        web_result, arxiv_result, media_result = await asyncio.gather(
+            self._safe_agent_execution("web", self.web_agent.research(query)),
+            self._safe_agent_execution("arxiv", self.arxiv_agent.research(query)),
+            self._safe_agent_execution("multimodal", self.multimodal_agent.research(query)),
+            return_exceptions=True
+        )
+        
+        errors = []
+        if isinstance(web_result, Exception):
+            logger.error(f"Web agent failed: {web_result}")
+            errors.append(f"web: {str(web_result)}")
+            web_result = None
+        if isinstance(arxiv_result, Exception):
+            logger.error(f"ArXiv agent failed: {arxiv_result}")
+            errors.append(f"arxiv: {str(arxiv_result)}")
+            arxiv_result = None
+        if isinstance(media_result, Exception):
+            logger.error(f"Media agent failed: {media_result}")
+            errors.append(f"media: {str(media_result)}")
+            media_result = None
+            
+        return AgentExecutionResult(
+            web_result=web_result,
+            arxiv_result=arxiv_result,
+            multimodal_result=media_result,
+            execution_errors=errors
+        )
+    
+    async def _safe_agent_execution(self, agent_name: str, agent_task):
+        try:
+            result = await agent_task
+            logger.info(f"{agent_name} agent completed successfully")
+            return result
+        except Exception as e:
+            logger.error(f"{agent_name} agent failed: {e}")
+            raise e
+        
+    async def _resolve_contradictions(self, contradictions: List[Contradiction]) -> List[Resolution]:
+        resolutions = []
+        
+        for contradiction in contradictions:
+            try:
+                resolution_query = await self.validator.generate_resolution_query(contradiction)
+
+                # Use web agent to search for resolution
+                resolution_result = await self.web_agent.research(resolution_query)
+                resolution = await self.validator.analyze_resolution(contradiction, resolution_result.summary)
+                
+                resolution.resolution_query = resolution_query
+                resolutions.append(resolution)
+                logger.info(f"Resolved contradiction: {contradiction.topic}")                
+                
+            except Exception as e:
+                logger.error(f"Error resolving contradiction {contradiction.id}: {e}")
+        
+        return resolutions
+    
+    async def _synthesize_report(self, query: str, web_result, arxiv_result, media_result, contradictions: List[Contradiction], resolutions: List[Resolution]) -> Tuple[str, str]:
+        try:
+            prompt = f"""
+                Create a research report for: "{query}"
+                
+                WEB FINDINGS: {self._extract_insights(web_result, "web")}
+                ACADEMIC FINDINGS: {self._extract_insights(arxiv_result, "arxiv")}
+                MEDIA FINDINGS: {self._extract_insights(media_result, "media")}
+                
+                CONTRADICTIONS: {len(contradictions)} found
+                RESOLUTIONS: {len(resolutions)} resolved
+                
+                Generate:
+                1. EXECUTIVE_SUMMARY: 2-3 sentences directly answering the query
+                2. DETAILED_ANALYSIS: 400-500 words comprehensive analysis
+                
+                Format:
+                EXECUTIVE_SUMMARY:
+                [summary]
+                
+                DETAILED_ANALYSIS:
+                [analysis]
+            """
+            response = self.client.responses.parse(
+                model=OPENAI_CONFIG["default_model"],
+                input=[
+                    {"role": "system", "content": "Generate comprehensive research reports."},
                     {"role": "user", "content": prompt}
                 ],
-                text_format=tasksOutputFormat,
+                text_format=SynthesizeTask,
                 temperature=0.3
             )
-            decomposition_result = json.loads(response.output_parsed)
+            
+            content = json.loads(response.output[0].content[0].text)
+            
+            executive_summary = content["EXECUTIVE_SUMMARY"]
+            detailed_analysis = content["DETAILED_ANALYSIS"]
+            return executive_summary, detailed_analysis
             
         except Exception as e:
-            logger.error(f"Error in query decomposition: {e}")
-            decomposition_result = self._fallback_decomposition(query)
-         
-        # convert LLM responses into ResearchTask objects 
-        tasks = []
-        for idx, task_data in enumerate(decomposition_result["tasks"]):
-            task = ResearchTask(
-                task_id= f"task_{idx}_{datetime.now().timestamp()}",
-                agent_type= task_data["agent"],
-                query= task_data["specific_query"],
-                priority=task_data["priority"]
-            )
-            tasks.append(task)
+            logger.error(f"Error synthesizing report: {e}")
+            return "Research completed.", f"Analysis of '{query}' completed."
+        
+    async def _store_research_in_cache(self, query: str, task_id: str, cached_data: CachedData):
+        try:
+            # Store query embedding with task_id in chroma
+            await self.memory_cache.store_query_with_task_id(query, task_id)
             
-        # create the research plan
-        plan_id = f"plan_{datetime.now().timestamp()}"
-        research_plan = ResearchPlan(
-            plan_id=plan_id,
-            original_query=query,
-            decomposed_tasks=tasks,
-            validation_requirements=decomposition_result["validation_requirements"],
-            estimated_time=len(tasks) * 30 # seconds
-        )
-        
-        logger.info(f"Created research plan {plan_id} with {len(tasks)} tasks")
-        return research_plan
-    
-    def _fallback_decomposition(self, query: str) -> Dict[str, Any]:
-        return {
-            "tasks": [
-                {"agent": "arxiv_agent", "specific_query": f"academic research on {query}", "priority": 4},
-                {"agent": "web_agent", "specific_query": f"current information about {query}", "priority": 3},
-                {"agent": "document_agent", "specific_query": f"local documents related to {query}", "priority": 2},
-                {"agent": "media_agent", "specific_query": f"visual content about {query}", "priority": 1}
-            ],
-            "validation_requirements": ["cross_source_verification", "temporal_consistency"]
-        }
-    
-    async def _execute_research_plan(self, plan_id: str):
-        """
-            Execute the research plan by coordinating multiple agents in parallel
-        """
-        
-        plan = self.active_plans[plan_id]
-        
-        # group tasks by agents for parallel execution
-        agent_tasks = {}
-        for task in plan.decomposed_tasks:
-            if task.agent_type not in agent_tasks:
-                agent_tasks[task.agent_type] = []
-            agent_tasks[task.agent_type].append(task)
+            # Store all research data under task_id in redis
+            await self.memory_cache.store_task_data(task_id, cached_data.__dict__)
             
-        # start parallel execution for each agent type
-        agent_coroutines = []
-        for agent_type, tasks in agent_tasks.items():
-            coroutine = self._execute_agent_tasks(agent_type, tasks, plan_id)
-            agent_coroutines.append(coroutine)
+            logger.info(f"Stored research in cache with task_id: {task_id}")
+        
+        except Exception as e:
+            logger.error(f"Error storing in cache: {e}")
             
-        # Wait for all agents to complete their initial tasks
-        await asyncio.gather(*agent_coroutines)
+    def _extract_insights(self, result, source_type: str) -> List[str]:
+        if not result:
+            return []
         
-        # Check for contradictions and trigger validation if needed
-        await self._check_and_validate_results(plan_id)
-        
-        # generate final report
-        await self._generate_final_report(plan_id)
-        
-    async def _execute_agent_tasks(self, agent_type: str, tasks: List[ResearchTask], plan_id: str):
-        """
-            Execute tasks for a specific agent type
-            This method communicates with individual agents through the MCP server
-            and manages their ReAct loops.
-        """
-        logger.info(f"Starting {agent_type} with {len(tasks)} tasks")
-        self.agent_status[agent_type] = "ACTIVE"
-        
-        for task in tasks:
-            try:
-                task.status = "IN_PROGRESS"
-                
-                # Send task to agent via MCP server
-                agent_result = await self._send_task_to_agent(agent_type, task)
-                
-                # store result in memory cache
-                await self.memory_cache.store_agent_result(
-                    agent_type, task.query, agent_result, plan_id
-                )
-                
-                task.result = agent_result
-                task.status = "COMPLETED"
-                task.confidence_score = agent_result.get("confidence", 0.7)
-                logger.info(f"Completed task {task.task_id} for {agent_type}")
+        if source_type == "web":
+            if hasattr(result, 'key_findings'):
+                return result.key_findings or []
             
-            except Exception as e:
-                logger.error(f"Error executing task {task.task_id}: {e}")
-                task.status = "FAILED"
-                task.result = {"error": str(e)}
-                
-        self.agent_status[agent_type] = "IDLE"
-        logger.info(f"Finished all tasks for {agent_type}")
+            elif isinstance(result, dict):
+                return result.get('key_findings', [])
         
-    async def _send_task_to_agent(self, agent_type: str, task: ResearchTask) -> Dict[str, Any]:
-        task_payload = {
-            "task_id" : task.task_id,
-            "query" : task.query,
-            "priority" : task.priority,
-            "agent_type" : agent_type,
-            "context" : await self.memory_cache.get_relevant_context(task.query)
-        }
-        
-        # call to MCP server
-        
-        
-    async def _check_and_validate_results(self, plan_id: str):
-        """
-            This method uses the validation engine to detect conflicts and decides whether additional research iterations are needed.
-        """
-        plan = self.active_plans[plan_id]
-        
-        completed_results = []
-        for task in plan.decomposed_tasks:
-            if task.status == "COMPLETED" and task.result:
-                completed_results.append({
-                    "agent_type": task.agent_type,
-                    "task_id": task.task_id,
-                    "query": task.query,
-                    "result": task.result,
-                    "confidence": task.confidence_score
-                })
-        
-        contradictions = await self.validation_engine.detect_contradictions(completed_results)
-        
-        if contradictions:
-            logger.info(f"Found {len(contradictions)} contradictions, triggering validation")
+        elif source_type == "arxiv":
+            insights = []
             
-            # create validation tasks for each contradictions
-            validation_tasks = []
-            for contradiction in contradictions:
-                validation_task = await self._create_validation_task(contradiction, plan_id)
-                validation_tasks.append(validation_task)
-                
-            # Execute validation tasks
-            for validation_task in validation_tasks:
-                await self._execute_validation_task(validation_task, plan_id)
-                
-    async def _create_validation_task(self, contradiction: Dict, plan_id: str) -> ResearchTask:
-        """
-           This method analyzes the contradiction and determines what additional research is needed to resolve it.
-        """
-        
-        # use llm to determine the best validation approach
-        validation_prompt = f"""
-            A contradiction has been detected in research results:
-            
-            Contradiction Details: {json.dumps(contradiction, indent=2)}
-            
-            Availabe agents and it's capabilities : {self.agent_capabilities}
-            
-            Please determine:
-            1. Which agent should handle the validation research
-            2. What specific query should be used for validation
-            3. What type of sources would be most authoritative for resolving this contradiction
+            if hasattr(result, 'topic_results'):
+                for topic_result in result.topic_results:
+                    if hasattr(topic_result, 'key_insights'):
+                        insights.extend(topic_result.key_insights)
 
-            Return a JSON response with the validation strategy.
+            elif isinstance(result, dict):
+                topic_results = result.get('topic_results', [])
+                for topic_result in topic_results:
+                    if isinstance(topic_result, dict):
+                        insights.extend(topic_result.get('key_insights', []))
+                    elif hasattr(topic_result, 'key_insights'):
+                        insights.extend(topic_result.key_insights or [])
+            
+            return insights   
+            
+        elif source_type == "media":
+            if hasattr(result, 'key_insights'):
+                return result.key_insights or []
+            elif isinstance(result, dict):
+                return result.get('key_insights', [])
+            
+        return []
+    
+    def _count_sources(self, web_result, arxiv_result, media_result) -> int:
+        """
+            Count total sources analyzed.
+        """
+        count = 0
+        
+        if web_result and hasattr(web_result, 'sources_analyzed'):
+            count += web_result.sources_analyzed
+        if arxiv_result and hasattr(arxiv_result, 'total_papers_analyzed'):
+            count += arxiv_result.total_papers_analyzed
+        if media_result and hasattr(media_result, 'files_processed'):
+            count += media_result.files_processed
+        
+        return count
+    
+    def _count_sources_from_dict(self, web_dict, arxiv_dict, media_dict) -> int:
+        """
+            Count total sources from cached dictionary data.
+        """
+        count = 0
+        
+        if web_dict:
+            count += web_dict.get('sources_analyzed', 0)
+        if arxiv_dict:
+            count += arxiv_dict.get('total_papers_analyzed', 0)
+        if media_dict:
+            count += media_dict.get('files_processed', 0)
+        
+        return count  
+    
+    def _create_error_report(self, query: str, error: str) -> ResearchReport:
+        """
+            Create error report.
         """
         
-        try:
-            response = await self.client.responses.parse(
-                model = OPENAI_CONFIG["default_model"],
-                messages=[
-                    {"role": "system", "content": "You are an expert at resolving research contradictions. Always respond with valid JSON."},
-                    {"role": "user", "content": validation_prompt}
-                ],
-                text_format=validationTask,
-                temperature=0.1
-            )
-            validation_strategy = json.loads(response.output_parsed)
-            
-        except Exception as e:
-            logger.error(f"Error creating validation strategy : {e}")
-            validation_strategy = {
-                "agent": "web_agent",  # Default to web search for validation
-                "query": f"validation research for: {contradiction.get('topic', 'unknown')}",
-                "focus": "authoritative sources"
-            }
-            
-        validation_task = ResearchTask(
-            task_id=f"validation_{datetime.now().timestamp()}",
-            agent_type = validation_strategy["agent"],
-            query = validation_strategy["query"],
-            priority=5
+        return ResearchReport(
+            task_id=str(uuid.uuid4()),
+            query=query,
+            methodology="Failed Research",
+            web_insights=[],
+            academic_insights=[],
+            media_insights=[],
+            contradictions_found=[],
+            resolutions=[],
+            executive_summary="Research failed due to technical error.",
+            detailed_analysis=f"Error: {error}",
+            sources_analyzed=0,
+            timestamp=datetime.now(),
+            used_cache=False
         )
         
-        return validation_task
-    
-    async def _execute_validation_task(self, validation_task: ResearchTask, plan_id: str):
-        logger.info(f"Executing validation task: {validation_task.task_id}")
+async def create_simple_orchestrator() -> OrchestratorAgent:
         
-        await self._execute_agent_tasks(validation_task.agent_type, [validation_task], plan_id)
-        
-        # update the validation engine with new evidence
-        await self.validation_engine.update_with_validation_result(validation_task.result, validation_task.task_id)
-        
-        # add validation task to the plan
-        plan = self.active_plans[plan_id]
-        plan.decomposed_tasks.append(validation_task)
-        
-    async def _generate_final_report(self, plan_id: str):
-        
-        plan = self.active_plans[plan_id]
-        
-        all_results = []
-        for task in plan.decomposed_tasks:
-            if task.status == "COMPLETED" and task.result:
-                all_results.append(task.result)
-                
-        resolved_contradictions = await self.validation_engine.get_resolved_contradictions()
-        
-        report_prompt = f"""
-            Generate a comprehensive research report for the query: "{plan.original_query}"
-            
-            Research Results: {json.dumps(all_results, indent=2)}
-            Resolved Contradictions: {json.dumps(resolved_contradictions, indent=2)}
-            
-            Please create a well-structured report that:
-            1. Provides a clear answer to the original research question
-            2. Explains any contradictions found and how they were resolved
-            3. Cites specific sources and evidence
-            4. Acknowledges limitations and areas for further research
-            5. Uses appropriate academic formatting
-            
-            The report should be comprehensive but accessible.
-            
-        """
-        
-        try:
-            response = await self.client.responses.parse(
-                model = OPENAI_CONFIG["default_model"],
-                messages=[
-                    {"role": "system", "content": "You are an expert research writer who creates comprehensive, well-structured reports."},
-                    {"role": "user", "content": report_prompt}
-                ],
-                text_format=validationTask,
-                temperature=0.5
-            )
-            final_report  = response.output_text
-            
-        except Exception as e:
-            logger.error(f"Error creating validation strategy : {e}")
-            final_report = "Error generating report. Please check logs for details."
-            
-        await self.memory_cache.store_final_report(plan_id, final_report, plan.original_query)
-        
-        logger.info(f"Generated final report for plan {plan_id}")
-        return final_report
-                
-    async def get_research_status(self, plan_id: str) -> Dict[str, Any]:
-        if plan_id not in self.active_plans:
-            return {"error": "plan not found"}
-        
-        plan = self.active_plans[plan_id]
-        
-        status_summary = {
-            "plan_id": plan_id,
-            "original_query": plan.original_query,
-            "total_tasks": len(plan.decomposed_tasks),
-            "completed_tasks": len([task for task in plan.decomposed_tasks if task.status == "completed"]),
-            "failed_tasks": len([task for task in plan.decomposed_tasks if task.status == "failed"]),
-            "agent_status": self.agent_status.copy(),
-            "estimated_completion": plan.estimated_completion_time,
-            "created_at": plan.created_at.isoformat()
-        }
-        return status_summary
-    
+    orchestrator = OrchestratorAgent()
+    await orchestrator.initialize()
+    return orchestrator
