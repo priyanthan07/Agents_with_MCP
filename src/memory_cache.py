@@ -38,7 +38,12 @@ class MemoryCacheLayer:
             decode_responses=True            
         )
         
-        self.chroma_client = chromadb.EphemeralClient()
+        self.client = chromadb.HttpClient(
+            host=CHROMA_CONFIG["chroma_host"], 
+            port=CHROMA_CONFIG["chroma_port"]
+        )
+        
+        
         self.query_collection = self.chroma_client.get_or_create_collection(
             name="user_queries",
             metadata={"description": "User query embeddings for similarity search"}
