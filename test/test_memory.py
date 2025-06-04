@@ -139,27 +139,35 @@ async def cleanup_test_data():
     print("\n🧹 Cleaning up test data...")
     print("-" * 50)
     
-    # Clean Redis test data
+    # Clean Redis test data - Updated to use new Redis operation pattern
     test_task_ids = ["test-task-123", "renewable-123", "ml-456", "climate-789"]
     
     for task_id in test_task_ids:
         try:
-            # Get metadata to find all keys
-            metadata_key = f"task:{task_id}:metadata"
-            metadata_json = await cache.redis_client.get(metadata_key)
+            # Use the new Redis operation pattern
+            async def _cleanup_operation(redis_client, task_id):
+                metadata_key = f"task:{task_id}:metadata"
+                metadata_json = await redis_client.get(metadata_key)
+                
+                if metadata_json:
+                    metadata_dict = json.loads(metadata_json)
+                    data_keys = metadata_dict.get("data_keys", [])
+                    
+                    # Delete all data keys
+                    for key in data_keys:
+                        redis_key = f"task:{task_id}:{key}"
+                        await redis_client.delete(redis_key)
+                    
+                    # Delete metadata
+                    await redis_client.delete(metadata_key)
+                    return True
+                return False
             
-            if metadata_json:
-                metadata_dict = json.loads(metadata_json)
-                data_keys = metadata_dict.get("data_keys", [])
-                
-                # Delete all data keys
-                for key in data_keys:
-                    redis_key = f"task:{task_id}:{key}"
-                    await cache.redis_client.delete(redis_key)
-                
-                # Delete metadata
-                await cache.redis_client.delete(metadata_key)
+            success = await cache._execute_redis_operation(_cleanup_operation, task_id)
+            if success:
                 print(f"✅ Cleaned Redis data for task: {task_id}")
+            else:
+                print(f"ℹ️ No data found for task: {task_id}")
             
         except Exception as e:
             print(f"⚠️ Error cleaning Redis task {task_id}: {e}")
@@ -181,6 +189,55 @@ async def cleanup_test_data():
     
     print("🎉 Cleanup completed!")
 
+async def test_event_loop_safety():
+    """Test that new Redis client pattern works across different event loops"""
+    
+    print("\n🔄 Testing Event Loop Safety...")
+    print("-" * 50)
+    
+    cache = MemoryCacheLayer()
+    test_task_id = "event-loop-test"
+    test_data = {"test": "event loop safety data"}
+    
+    # Store data
+    await cache.store_task_data(test_task_id, test_data)
+    print("✅ Data stored in first event loop")
+    
+    # Retrieve in same event loop
+    result1 = await cache.retrieve_task_data(test_task_id)
+    print(f"✅ Same loop retrieval: {bool(result1)}")
+    
+    # Test with different event loop (simulate Streamlit's pattern)
+    def run_in_new_loop():
+        async def retrieve_in_new_loop():
+            cache2 = MemoryCacheLayer()
+            result2 = await cache2.retrieve_task_data(test_task_id)
+            return result2
+        
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            return new_loop.run_until_complete(retrieve_in_new_loop())
+        finally:
+            new_loop.close()
+    
+    # This should now work without "Future attached to different loop" errors
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(run_in_new_loop)
+        result2 = future.result()
+    
+    print(f"✅ Different loop retrieval: {bool(result2)}")
+    
+    # Cleanup
+    async def _cleanup_operation(redis_client, task_id):
+        await redis_client.delete(f"task:{task_id}:metadata")
+        await redis_client.delete(f"task:{task_id}:test")
+        return True
+    
+    await cache._execute_redis_operation(_cleanup_operation, test_task_id)
+    print("✅ Test data cleaned up")
+
 if __name__ == "__main__":
     print("🚀 Starting Cache System Tests...")
     print("Make sure Redis and ChromaDB are running!")
@@ -192,6 +249,9 @@ if __name__ == "__main__":
         
         # Run multiple queries test
         asyncio.run(test_multiple_queries())
+        
+        # Test event loop safety
+        asyncio.run(test_event_loop_safety())
         
     finally:
         # Always cleanup test data

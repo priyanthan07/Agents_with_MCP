@@ -174,9 +174,7 @@ class OrchestratorAgent:
         try:
             # Step 1: Execute all agents in parallel
             logger.info("Executing all agents in parallel")
-            execution_result = await self._execute_agents_parallel(query)
-            
-            await self.web_agent.research(query)
+            execution_result = await self._execute_agents(query)
             
             # Step 2: Detect contradictions
             logger.info("Detecting contradictions")
@@ -228,27 +226,48 @@ class OrchestratorAgent:
             logger.error(f"Error in full research: {e}")
             return self._create_error_report(query, str(e))
         
-    async def _execute_agents_parallel(self, query: str) -> AgentExecutionResult:
-        web_result, arxiv_result, media_result = await asyncio.gather(
-            self._safe_agent_execution("web", self.web_agent.research(query)),
-            self._safe_agent_execution("arxiv", self.arxiv_agent.research(query)),
-            self._safe_agent_execution("multimodal", self.multimodal_agent.research(query)),
-            return_exceptions=True
-        )
-        
+    async def _execute_agents(self, query: str) -> AgentExecutionResult:
         errors = []
-        if isinstance(web_result, Exception):
-            logger.error(f"Web agent failed: {web_result}")
-            errors.append(f"web: {str(web_result)}")
-            web_result = None
-        if isinstance(arxiv_result, Exception):
-            logger.error(f"ArXiv agent failed: {arxiv_result}")
-            errors.append(f"arxiv: {str(arxiv_result)}")
-            arxiv_result = None
-        if isinstance(media_result, Exception):
-            logger.error(f"Media agent failed: {media_result}")
-            errors.append(f"media: {str(media_result)}")
-            media_result = None
+        web_result = None
+        arxiv_result = None
+        media_result = None
+        
+        logger.info(" Starting Web Research Agent...")
+        try:
+            web_result = await self._safe_agent_execution("web", self.web_agent.research(query))
+            logger.info(" Web agent completed successfully")
+        except Exception as e:
+            logger.error(f" Web agent failed: {e}")
+            errors.append(f"web: {str(e)}")
+        
+        # Step 2: Execute ArXiv Agent
+        logger.info(" Starting ArXiv Research Agent...")
+        try:
+            arxiv_result = await self._safe_agent_execution("arxiv", self.arxiv_agent.research(query))
+            logger.info(" ArXiv agent completed successfully")
+        except Exception as e:
+            logger.error(f" ArXiv agent failed: {e}")
+            errors.append(f"arxiv: {str(e)}")
+        
+        # Step 3: Execute Multimodal Agent
+        logger.info("🎬 Starting Multimodal Research Agent...")
+        try:
+            media_result = await self._safe_agent_execution("multimodal", self.multimodal_agent.research(query))
+            logger.info(" Multimodal agent completed successfully")
+        except Exception as e:
+            logger.error(f" Multimodal agent failed: {e}")
+            errors.append(f"multimodal: {str(e)}")
+            
+        successful_agents = []
+        if web_result: successful_agents.append("web")
+        if arxiv_result: successful_agents.append("arxiv")  
+        if media_result: successful_agents.append("multimodal")
+        
+        logger.info(f"Sequential execution completed: {len(successful_agents)}/3 agents successful")
+        if successful_agents:
+            logger.info(f"Successful agents: {', '.join(successful_agents)}")
+        if errors:
+            logger.warning(f"Failed agents: {len(errors)} errors")
             
         return AgentExecutionResult(
             web_result=web_result,

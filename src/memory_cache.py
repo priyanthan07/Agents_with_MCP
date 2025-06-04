@@ -31,12 +31,13 @@ class MemoryCacheLayer:
         result storage, and semantic search across all research data.
     """
     def __init__(self):
-        self.redis_client = redis.Redis(
-            host = REDIS_CONFIG["redis_host"],
-            port = REDIS_CONFIG["redis_port"],
-            db = REDIS_CONFIG["redis_db"],
-            decode_responses=True            
-        )
+        
+        self.redis_config = {
+            "host" : REDIS_CONFIG["redis_host"],
+            "port" : REDIS_CONFIG["redis_port"],
+            "db" : REDIS_CONFIG["redis_db"],
+            "decode_responses" : True            
+        }
         
         self.chroma_client = chromadb.HttpClient(
             host=CHROMA_CONFIG["chroma_host"], 
@@ -71,6 +72,36 @@ class MemoryCacheLayer:
     #         logger.error(f"Error generating embedding: {e}")
     #         # Return a zero vector as fallback
     #         return [0.0] * 1536
+    
+    
+    async def _get_redis_client(self) -> redis.Redis:
+        """
+        Create a fresh Redis client for the current event loop.
+        """
+        try:
+            return redis.Redis(**self.redis_config)
+        
+        except Exception as e:
+            logger.error(f"Failed to create Redis client: {e}")
+            raise
+        
+    async def _execute_redis_operation(self, ope_function, *args, **kwargs):
+        redis_client = None
+        try:
+            redis_client = await self._get_redis_client()
+            result = await ope_function(redis_client, *args, **kwargs)
+            return result
+        
+        except Exception as e:
+            logger.error(f"Redis operation failed: {e}")
+            raise
+        
+        finally:
+            if redis_client:
+                try:
+                    await redis_client.aclose()
+                except Exception as cleanup_error:
+                    logger.warning(f"Redis client cleanup failed: {cleanup_error}")
         
     async def find_similar_query(self, query: str) -> Optional[str]:
         """
@@ -85,8 +116,6 @@ class MemoryCacheLayer:
                 n_results=1,
                 include=['metadatas', 'distances']
             )
-            
-            print("chroma resullts : ", results)
             
             if results['ids'][0]:
                 distance = results['distances'][0][0]
@@ -135,10 +164,10 @@ class MemoryCacheLayer:
         """
             Store all research data under task_id in Redis.
         """
-        try:
+        async def _store_operation(redis_client, task_id, data):
             for key, value in data.items():
                 redis_key = f"task:{task_id}:{key}"
-                await self.redis_client.set(redis_key, json.dumps(value, default=str))
+                await redis_client.set(redis_key, json.dumps(value, default=str))
                 
             metadata = TaskMetadata(
                 task_id=task_id,
@@ -146,9 +175,11 @@ class MemoryCacheLayer:
                 data_keys=list(data.keys())
             )
             
-            await self.redis_client.set(f"task:{task_id}:metadata", json.dumps(asdict(metadata)))
+            await redis_client.set(f"task:{task_id}:metadata", json.dumps(asdict(metadata)))
             logger.info(f"Stored task data for task_id: {task_id}")
-                
+                    
+        try:
+            await self._execute_redis_operation(_store_operation, task_id, data)
         except Exception as e:
             logger.error(f"Error storing task data: {e}")
             
@@ -156,9 +187,9 @@ class MemoryCacheLayer:
         """
             Retrieve all data for a task_id from Redis.
         """
-        try:
+        async def _retrieve_operation(redis_client, task_id):
             metadata_key = f"task:{task_id}:metadata"
-            metadata_json = await self.redis_client.get(metadata_key)
+            metadata_json = await redis_client.get(metadata_key)
             
             if not metadata_json:
                 logger.warning(f"No metadata found for task_id: {task_id}")
@@ -170,13 +201,15 @@ class MemoryCacheLayer:
             
             for key in metadata.data_keys:
                 redis_key = f"task:{task_id}:{key}"
-                value_json = await self.redis_client.get(redis_key)
+                value_json = await redis_client.get(redis_key)
                 if value_json:
                     data[key] = json.loads(value_json)
                     
             logger.info(f"Retrieved task data for task_id: {task_id}")
-            return data       
-            
+            return data  
+        
+        try:     
+            return await self._execute_redis_operation(_retrieve_operation, task_id)
         except Exception as e:
             logger.error(f"Error retrieving task data: {e}")
             return {}
