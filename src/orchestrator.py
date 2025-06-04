@@ -119,7 +119,6 @@ class OrchestratorAgent:
                 return await self._execute_full_research(query)
             
             
-            
         except Exception as e:
             logger.error(f"Error in research: {e}")
             return self._create_error_report(query, str(e))
@@ -172,8 +171,8 @@ class OrchestratorAgent:
     async def _execute_full_research(self, query: str) -> ResearchReport:
         task_id = str(uuid.uuid4())
         try:
-            # Step 1: Execute all agents in parallel
-            logger.info("Executing all agents in parallel")
+            # Step 1: Execute all agents
+            logger.info("Executing all agents")
             execution_result = await self._execute_agents(query)
             
             # Step 2: Detect contradictions
@@ -448,9 +447,3 @@ class OrchestratorAgent:
             timestamp=datetime.now(),
             used_cache=False
         )
-        
-async def create_simple_orchestrator() -> OrchestratorAgent:
-        
-    orchestrator = OrchestratorAgent()
-    await orchestrator.initialize()
-    return orchestrator

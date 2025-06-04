@@ -11,6 +11,14 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from mcp.server.fastmcp import FastMCP
 from util.logger import get_logger
+import logging
+
+# Suppress all third-party logging to avoid duplicates
+logging.getLogger("uvicorn").setLevel(logging.ERROR)
+logging.getLogger("uvicorn.access").setLevel(logging.ERROR) 
+logging.getLogger("uvicorn.error").setLevel(logging.ERROR)
+logging.getLogger("fastapi").setLevel(logging.ERROR)
+logging.getLogger("mcp").setLevel(logging.ERROR)
 
 logger = get_logger(__name__)
 
@@ -19,8 +27,9 @@ mcp = FastMCP("Comprehensive ArXiv Research Server", port=8002)
 @mcp.tool()
 def search_papers(query: str, max_results: int = 8) -> dict:
     try:
-        client = arxiv.Client()
+        logger.info(f"Starting ArXiv search for query: '{query}' (max_results: {max_results})", context="ArXivServer")
         
+        client = arxiv.Client()
         search = arxiv.Search(
             query=query,
             max_results=max_results,
@@ -41,8 +50,8 @@ def search_papers(query: str, max_results: int = 8) -> dict:
                 'updated_date': str(paper.updated.date()) if paper.updated else None
             }
             papers.append(paper_data)
-            
-        logger.info(f"Found {len(papers)} papers for query: {query}")
+        
+        logger.info(f"Successfully found {len(papers)} papers for query: '{query}'", context="ArXivServer")
         
         return {
             "success": True,
@@ -55,7 +64,7 @@ def search_papers(query: str, max_results: int = 8) -> dict:
         }   
         
     except Exception as e:
-        logger.error(f"Error searching papers for query '{query}': {e}")
+        logger.error(f"Failed to search papers for query '{query}': {str(e)}", context="ArXivServer")
         return {
             "success": False,
             "error": str(e),
@@ -67,6 +76,8 @@ def search_papers(query: str, max_results: int = 8) -> dict:
 @mcp.tool()
 def get_paper_details(paper_ids: List[str]) -> dict:
     try:
+        logger.info(f"Retrieving details for {len(paper_ids)} papers", context="ArXivServer")
+        
         client = arxiv.Client()
         paper_details = []
         
@@ -96,14 +107,15 @@ def get_paper_details(paper_ids: List[str]) -> dict:
                 paper_details.append(detailed_info)
             
             except Exception as paper_error:
-                logger.warning(f"Error getting details for paper {paper_id}: {paper_error}")
+                logger.error(f"Failed to get details for paper {paper_id}: {str(paper_error)}", context="ArXivServer")
                 paper_details.append({
                     'paper_id': paper_id,
                     'error': str(paper_error),
                     'success': False
                 })
-                
-        logger.info(f"Retrieved details for {len(paper_details)} papers")  
+        
+        successful_count = len([p for p in paper_details if 'error' not in p])     
+        logger.info(f"Successfully retrieved {successful_count}/{len(paper_ids)} paper details", context="ArXivServer") 
         
         return {
             "success": True,
@@ -113,7 +125,7 @@ def get_paper_details(paper_ids: List[str]) -> dict:
         }
         
     except Exception as e:
-        logger.error(f"Error getting paper details: {e}")
+        logger.error(f"Critical error retrieving paper details: {str(e)}", context="ArXivServer")
         return {
             "success": False,
             "error": str(e),
@@ -122,13 +134,13 @@ def get_paper_details(paper_ids: List[str]) -> dict:
 
 def main():
     try:
-        logger.info("Starting Comprehensive ArXiv Research MCP Server...")
-        logger.info("Available tools: search_papers, get_paper_details")
+        logger.info("ArXiv MCP Server starting on port 8002", context="ArXivServer")
+        logger.info("Available tools: search_papers, get_paper_details", context="ArXivServer")
         mcp.run(transport="streamable-http")
     except KeyboardInterrupt:
-        logger.info("\nServer stopped by user")
+        logger.info("ArXiv MCP Server stopped by user", context="ArXivServer")
     except Exception as e:
-        logger.error(f"Server error: {e}")
+        logger.error(f"Critical server error: {str(e)}", context="ArXivServer")
         
 if __name__ == "__main__":
     main()

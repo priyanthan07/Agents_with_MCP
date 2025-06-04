@@ -11,6 +11,7 @@ dependencies = [
     "bs4>=0.0.2",
     "chroma>=0.2.0",
     "chromadb>=1.0.10",
+    "colorlog>=6.9.0",
     "google-genai>=1.18.0",
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.1",
