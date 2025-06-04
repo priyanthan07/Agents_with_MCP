@@ -1,6 +1,9 @@
+# app.py - Fixed version with proper event loop handling
 import streamlit as st
 import asyncio
 import json
+import concurrent.futures
+import threading
 from datetime import datetime
 from main import MultiAgentResearchSystem
 
@@ -12,71 +15,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    
-    .query-container {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        padding: 2rem;
-        border-radius: 15px;
-        margin: 1rem 0;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-    }
-    
-    .result-container {
-        background: white;
-        padding: 2rem;
-        border-radius: 15px;
-        border-left: 5px solid #667eea;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-        margin: 1rem 0;
-    }
-    
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        text-align: center;
-        margin: 0.5rem;
-    }
-    
-    .insight-item {
-        background: #f8f9ff;
-        border-left: 4px solid #667eea;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        border-radius: 0 8px 8px 0;
-    }
-    
-    .status-success {
-        color: #28a745;
-        font-weight: bold;
-    }
-    
-    .status-error {
-        color: #dc3545;
-        font-weight: bold;
-    }
-    
-    .loading-text {
-        text-align: center;
-        color: #667eea;
-        font-style: italic;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # Initialize session state
 if 'system' not in st.session_state:
     st.session_state.system = None
@@ -85,58 +23,67 @@ if 'research_history' not in st.session_state:
 if 'current_result' not in st.session_state:
     st.session_state.current_result = None
 
+def run_async_with_new_loop(coro):
+    """
+    Safely run async code in Streamlit by creating a completely new event loop
+    in a separate thread, avoiding conflicts with Streamlit's internal loops.
+    """
+    def _run_in_thread():
+        # Create fresh event loop in this thread
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            return new_loop.run_until_complete(coro)
+        finally:
+            # Clean up the loop
+            new_loop.close()
+    
+    # Execute in thread pool to isolate from Streamlit's threading
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_run_in_thread)
+        return future.result()
+
 async def initialize_system():
     """Initialize the research system"""
-    if st.session_state.system is None:
-        try:
-            st.session_state.system = MultiAgentResearchSystem()
-            await st.session_state.system.initialize()
-            return True
-        except Exception as e:
-            st.error(f"❌ System initialization failed: {e}")
-            return False
-    return True
+    try:
+        system = MultiAgentResearchSystem()
+        await system.initialize()
+        return system
+    except Exception as e:
+        st.error(f"❌ System initialization failed: {e}")
+        return None
 
-async def run_research(query):
+async def run_research(system, query):
     """Run research query"""
     try:
-        result = await st.session_state.system.research(query)
-        st.session_state.current_result = result
-        st.session_state.research_history.append(result)
+        result = await system.research(query)
         return result
     except Exception as e:
         st.error(f"❌ Research failed: {e}")
         return None
 
-def run_async(coro):
-    """Helper to run async functions in Streamlit"""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
-
 def main():
     # Header
-    st.markdown('<h1 class="main-header">🔬 AI Research Assistant</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #666; font-size: 1.2rem;">Powered by Multi-Agent AI System with Web, Academic & Multimodal Analysis</p>', unsafe_allow_html=True)
+    st.markdown('<h1 style="text-align: center;">🔬 AI Research Assistant</h1>', unsafe_allow_html=True)
+    st.markdown('<p style="text-align: center; color: #666;">Powered by Multi-Agent AI System</p>', unsafe_allow_html=True)
     
     # Initialize system button
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🚀 Initialize AI System", use_container_width=True, type="primary"):
             with st.spinner("🔄 Starting AI agents..."):
-                success = run_async(initialize_system())
-                if success:
-                    st.success("✅ AI Research System Ready!")
-                    st.rerun()
+                try:
+                    # Use our safe async runner
+                    system = run_async_with_new_loop(initialize_system())
+                    if system:
+                        st.session_state.system = system
+                        st.success("✅ AI Research System Ready!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Initialization failed: {e}")
 
     # Main research interface
     if st.session_state.system:
-        st.markdown('<div class="query-container">', unsafe_allow_html=True)
-        
-        # Research form
         st.markdown("### 💭 What would you like to research?")
         
         # Sample queries for inspiration
@@ -146,8 +93,7 @@ def main():
                 "Impact of climate change on global food security",
                 "Benefits and risks of renewable energy technologies",
                 "Future of remote work and its effects on productivity",
-                "Ethical implications of genetic engineering and CRISPR",
-                "How social media algorithms influence human behavior"
+                "Ethical implications of genetic engineering and CRISPR"
             ]
             
             for i, sample in enumerate(sample_queries):
@@ -161,39 +107,26 @@ def main():
             "Enter your research question:",
             value=default_query,
             height=100,
-            placeholder="e.g., What are the latest trends in quantum computing and their potential applications?",
-            help="Be specific about what you want to research. The AI will analyze web sources, academic papers, and multimedia content."
+            placeholder="e.g., What are the latest trends in quantum computing?",
         )
         
         # Research button
         if st.button("🔍 Start Research", use_container_width=True, type="primary", disabled=not query.strip()):
             if query.strip():
                 with st.spinner("🤖 AI agents are researching... This may take a few minutes"):
-                    # Progress indicators
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    status_text.markdown('<p class="loading-text">🌐 Web Research Agent is searching...</p>', unsafe_allow_html=True)
-                    progress_bar.progress(33)
-                    
-                    status_text.markdown('<p class="loading-text">📚 Academic Research Agent is analyzing papers...</p>', unsafe_allow_html=True)
-                    progress_bar.progress(66)
-                    
-                    status_text.markdown('<p class="loading-text">🎬 Multimodal Agent is processing content...</p>', unsafe_allow_html=True)
-                    progress_bar.progress(100)
-                    
-                    # Run research
-                    result = run_async(run_research(query))
-                    
-                    # Clear progress
-                    progress_bar.empty()
-                    status_text.empty()
-                    
-                    if result:
-                        st.success("✅ Research completed!")
-                        st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+                    try:
+                        # Use our safe async runner for research
+                        result = run_async_with_new_loop(run_research(st.session_state.system, query))
+                        if result:
+                            st.session_state.current_result = result
+                            st.session_state.research_history.append(result)
+                            st.success("✅ Research completed!")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Research failed: {e}")
+                        # Show the detailed error for debugging
+                        with st.expander("🔍 Error Details"):
+                            st.code(str(e))
     
     else:
         st.info("👆 Please initialize the AI system first to start researching")
@@ -205,54 +138,26 @@ def main():
         st.markdown("---")
         st.markdown("## 📊 Research Results")
         
-        # Metrics row
+        # Metrics
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            st.markdown(f'''
-            <div class="metric-card">
-                <h3>{result.sources_analyzed}</h3>
-                <p>Sources Analyzed</p>
-            </div>
-            ''', unsafe_allow_html=True)
-        
+            st.metric("Sources Analyzed", result.sources_analyzed)
         with col2:
             total_insights = len(result.web_insights) + len(result.academic_insights) + len(result.media_insights)
-            st.markdown(f'''
-            <div class="metric-card">
-                <h3>{total_insights}</h3>
-                <p>Insights Generated</p>
-            </div>
-            ''', unsafe_allow_html=True)
-        
+            st.metric("Insights Generated", total_insights)
         with col3:
-            st.markdown(f'''
-            <div class="metric-card">
-                <h3>{len(result.contradictions_found)}</h3>
-                <p>Contradictions Found</p>
-            </div>
-            ''', unsafe_allow_html=True)
-        
+            st.metric("Contradictions Found", len(result.contradictions_found))
         with col4:
             cache_status = "📋 Cached" if result.used_cache else "🆕 Fresh"
-            st.markdown(f'''
-            <div class="metric-card">
-                <h3>{cache_status}</h3>
-                <p>Research Type</p>
-            </div>
-            ''', unsafe_allow_html=True)
+            st.metric("Research Type", cache_status)
         
         # Executive Summary
-        st.markdown('<div class="result-container">', unsafe_allow_html=True)
         st.markdown("### 📋 Executive Summary")
-        st.markdown(f"**{result.executive_summary}**")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.info(result.executive_summary)
         
         # Detailed Analysis
-        st.markdown('<div class="result-container">', unsafe_allow_html=True)
         st.markdown("### 📖 Detailed Analysis")
         st.markdown(result.detailed_analysis)
-        st.markdown('</div>', unsafe_allow_html=True)
         
         # Insights by source
         tab1, tab2, tab3 = st.tabs(["🌐 Web Insights", "📚 Academic Insights", "🎬 Media Insights"])
@@ -260,57 +165,43 @@ def main():
         with tab1:
             if result.web_insights:
                 for i, insight in enumerate(result.web_insights, 1):
-                    st.markdown(f'''
-                    <div class="insight-item">
-                        <strong>{i}.</strong> {insight}
-                    </div>
-                    ''', unsafe_allow_html=True)
+                    st.markdown(f"**{i}.** {insight}")
             else:
                 st.info("No web insights available")
         
         with tab2:
             if result.academic_insights:
                 for i, insight in enumerate(result.academic_insights, 1):
-                    st.markdown(f'''
-                    <div class="insight-item">
-                        <strong>{i}.</strong> {insight}
-                    </div>
-                    ''', unsafe_allow_html=True)
+                    st.markdown(f"**{i}.** {insight}")
             else:
                 st.info("No academic insights available")
         
         with tab3:
             if result.media_insights:
                 for i, insight in enumerate(result.media_insights, 1):
-                    st.markdown(f'''
-                    <div class="insight-item">
-                        <strong>{i}.</strong> {insight}
-                    </div>
-                    ''', unsafe_allow_html=True)
+                    st.markdown(f"**{i}.** {insight}")
             else:
                 st.info("No media insights available")
         
-        # Contradictions and resolutions
+        # Contradictions
         if result.contradictions_found:
             st.markdown("### ⚠️ Contradictions & Resolutions")
             for i, contradiction in enumerate(result.contradictions_found, 1):
-                with st.expander(f"Contradiction {i}: {contradiction.topic} ({contradiction.severity} severity)"):
+                with st.expander(f"Contradiction {i}: {contradiction.topic}"):
+                    st.markdown(f"**Severity:** {contradiction.severity}")
                     st.markdown(f"**Sources:** {contradiction.source1} vs {contradiction.source2}")
-                    st.markdown(f"**Issue:** Conflicting information about {contradiction.topic}")
                     
                     # Find resolution
                     resolution = next((r for r in result.resolutions if r.contradiction_id == contradiction.id), None)
                     if resolution:
                         st.markdown(f"**Resolution:** {resolution.conclusion}")
-                        confidence_color = "🟢" if resolution.confidence > 0.7 else "🟡" if resolution.confidence > 0.4 else "🔴"
-                        st.markdown(f"**Confidence:** {confidence_color} {resolution.confidence:.2f}")
+                        st.markdown(f"**Confidence:** {resolution.confidence:.2f}")
         
-        # Download results
+        # Export results
         st.markdown("### 💾 Export Results")
         col1, col2 = st.columns(2)
         
         with col1:
-            # JSON export
             json_data = {
                 "query": result.query,
                 "executive_summary": result.executive_summary,
@@ -319,8 +210,7 @@ def main():
                 "academic_insights": result.academic_insights,
                 "media_insights": result.media_insights,
                 "sources_analyzed": result.sources_analyzed,
-                "timestamp": result.timestamp.isoformat(),
-                "methodology": result.methodology
+                "timestamp": result.timestamp.isoformat()
             }
             
             st.download_button(
@@ -331,15 +221,12 @@ def main():
             )
         
         with col2:
-            # Text export
             text_report = f"""
 RESEARCH REPORT
 ===============
-
 Query: {result.query}
 Date: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
-Sources Analyzed: {result.sources_analyzed}
-Methodology: {result.methodology}
+Sources: {result.sources_analyzed}
 
 EXECUTIVE SUMMARY
 ================
@@ -381,3 +268,4 @@ MEDIA INSIGHTS
 
 if __name__ == "__main__":
     main()
+    
