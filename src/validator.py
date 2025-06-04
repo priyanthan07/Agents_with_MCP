@@ -35,7 +35,7 @@ class ValidationResult:
     resolutions_needed: List[str]
     validation_summary: str
     
-class severityType(Enum, str):
+class severityType(str, Enum):
     low = 'low'
     medium = 'medium'
     high = 'high'
@@ -49,8 +49,8 @@ class ContradictionDetector(BaseModel):
     reasoning: str
     
 class AnalyzeResolutionFormat(BaseModel):
-    CONCLUSION = str
-    CONFIDENCE = float
+    CONCLUSION : str
+    CONFIDENCE : float
     
 class ResearchValidator:
     """
@@ -93,10 +93,8 @@ class ResearchValidator:
                 return []
             
             claims = []
-            if hasattr(web_result, 'key_findings'):
-                claims.extend(web_result.key_findings)
-            if hasattr(web_result, 'summary'):
-                claims.append(web_result.summary)
+            claims.extend(web_result.key_findings)
+            claims.append(web_result.summary)
                 
             return claims
         
@@ -110,13 +108,10 @@ class ResearchValidator:
                 return []
             
             claims = []
-            if hasattr(arxiv_result, 'topic_results'):
-                for topic_result in arxiv_result.topic_results:
-                    if hasattr(topic_result, 'key_insights'):
-                        claims.extend(arxiv_result.key_findings)
+            for topic_result in arxiv_result.topic_results:
+                claims.extend(topic_result.key_insights)
                 
-            if hasattr(arxiv_result, 'global_synthesis'):
-                claims.append(arxiv_result.global_synthesis)
+            claims.append(arxiv_result.global_synthesis)
                 
             return claims
         
@@ -130,10 +125,8 @@ class ResearchValidator:
                 return []
             
             claims = []
-            if hasattr(media_result, 'key_insights'):
-                claims.extend(media_result.key_insights)
-            if hasattr(media_result, 'synthesis'):
-                claims.append(media_result.synthesis)
+            claims.extend(media_result.key_insights)
+            claims.append(media_result.synthesis)
             return claims
         
         except Exception as e:
@@ -175,7 +168,7 @@ class ResearchValidator:
             result = json.loads(response.output[0].content[0].text)
             contradictions = []
             
-            for contradiction_data in result.contradictions:
+            for contradiction_data in result["contradictions"]:
                 contradiction = Contradiction(
                     id=str(uuid.uuid4()),
                     source1=source1,
@@ -243,7 +236,7 @@ class ResearchValidator:
             """
             response = self.client.responses.parse(
                 model=OPENAI_CONFIG["default_model"],
-                messages=[
+                input=[
                     {"role": "system", "content": "Analyze evidence objectively to resolve contradictions."},
                     {"role": "user", "content": prompt}
                 ],

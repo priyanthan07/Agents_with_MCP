@@ -6,7 +6,6 @@ from datetime import datetime
 from openai import OpenAI
 from pydantic import BaseModel
 import uuid
-from memory_cache import MemoryCacheLayer
 from util.logger import get_logger
 from config import OPENAI_CONFIG
 
@@ -14,8 +13,8 @@ from agents.web_agent import WebResearchAgent, WebResearchResult
 from agents.arxiv_agent import ArxivResearchAgent, GlobalResearchResult
 from agents.multimodal_agent import MultiModalResearchAgent, MultiModalResearchResult
 
-from memory_cache import MemoryCacheLayer
-from validator import ResearchValidator
+from src.memory_cache import MemoryCacheLayer
+from src.validator import ResearchValidator
 
 logger = get_logger(__name__)
 
@@ -81,7 +80,7 @@ class SynthesizeTask(BaseModel):
     DETAILED_ANALYSIS : str
     
 class OrchestratorAgent:
-    def __init__(self, memory_cache: MemoryCacheLayer, validation_engine):
+    def __init__(self):
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
         self.memory_cache = MemoryCacheLayer()
         self.validator = ResearchValidator()
@@ -110,6 +109,7 @@ class OrchestratorAgent:
         
         try:
             similar_task_id = await self.memory_cache.find_similar_query(query)
+            
             if similar_task_id:
                 logger.info(f"Using cached data from task_id: {similar_task_id}")
                 return await self._generate_report_from_cache(query, similar_task_id)
@@ -117,6 +117,8 @@ class OrchestratorAgent:
             else:
                 logger.info("No similar query found - executing full research")
                 return await self._execute_full_research(query)
+            
+            
             
         except Exception as e:
             logger.error(f"Error in research: {e}")
@@ -173,6 +175,8 @@ class OrchestratorAgent:
             # Step 1: Execute all agents in parallel
             logger.info("Executing all agents in parallel")
             execution_result = await self._execute_agents_parallel(query)
+            
+            await self.web_agent.research(query)
             
             # Step 2: Detect contradictions
             logger.info("Detecting contradictions")

@@ -7,7 +7,7 @@ import redis.asyncio as redis
 import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
-
+import chromadb.utils.embedding_functions as embedding_functions
 from util.logger import get_logger
 from config import REDIS_CONFIG, CHROMA_CONFIG, OPENAI_CONFIG
 
@@ -38,35 +38,39 @@ class MemoryCacheLayer:
             decode_responses=True            
         )
         
-        self.client = chromadb.HttpClient(
+        self.chroma_client = chromadb.HttpClient(
             host=CHROMA_CONFIG["chroma_host"], 
             port=CHROMA_CONFIG["chroma_port"]
         )
         
+        # openai_ef = embedding_functions.OpenAIEmbeddingFunction(
+        #         api_key=OPENAI_CONFIG["api_key"],
+        #         model_name=OPENAI_CONFIG["embd_model"]
+        #     )
         
         self.query_collection = self.chroma_client.get_or_create_collection(
             name="user_queries",
-            metadata={"description": "User query embeddings for similarity search"}
+            # embedding_function= openai_ef
         )
         
-        self.similarity_threshold = 0.95
+        self.similarity_threshold = 0.7
         
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
         
         logger.info("Memory and caching layer initialized successfully")
         
-    async def _generate_embedding(self, text: str) -> List[float]:
-        try:
-            response = await self.client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
-            )
-            return response.data[0].embedding
+    # async def _generate_embedding(self, text: str) -> List[float]:
+    #     try:
+    #         response = self.client.embeddings.create(
+    #             model="text-embedding-3-small",
+    #             input=text
+    #         )
+    #         return response.data[0].embedding
             
-        except Exception as e:
-            logger.error(f"Error generating embedding: {e}")
-            # Return a zero vector as fallback
-            return [0.0] * 1536
+    #     except Exception as e:
+    #         logger.error(f"Error generating embedding: {e}")
+    #         # Return a zero vector as fallback
+    #         return [0.0] * 1536
         
     async def find_similar_query(self, query: str) -> Optional[str]:
         """
@@ -74,17 +78,20 @@ class MemoryCacheLayer:
             Returns task_id if found, None otherwise.
         """
         try:
-            query_embedding = await self._generate_embedding(query)
+            # query_embedding = await self._generate_embedding(query)
             
             results = self.query_collection.query(
-                query_embeddings=[query_embedding],
+                query_texts=[query],
                 n_results=1,
                 include=['metadatas', 'distances']
             )
             
+            print("chroma resullts : ", results)
+            
             if results['ids'][0]:
                 distance = results['distances'][0][0]
                 similarity = 1 - distance
+                logger.info(f"with similarity {similarity:.3f} / {self.similarity_threshold}")
                 
                 if similarity >= self.similarity_threshold:
                     task_id = results['metadatas'][0][0]['task_id']
@@ -104,7 +111,7 @@ class MemoryCacheLayer:
             Store query embedding in ChromaDB with task_id metadata.
         """
         try:
-            query_embedding = await self._generate_embedding(query)
+            # query_embedding = await self._generate_embedding(query)
             query_hash = hashlib.md5(query.encode()).hexdigest()
             
             metadata = QueryMetadata(
@@ -113,10 +120,9 @@ class MemoryCacheLayer:
                 query_text=query
             )
             
-            self.chroma_client._add(
+            self.query_collection.add(
                 ids=[query_hash],
                 documents=[query],
-                embeddings=[query_embedding],
                 metadatas=[asdict(metadata)]
             )
             
