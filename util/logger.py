@@ -13,7 +13,7 @@ class AppLoggerService:
     and context tracking. Displays logs only in CLI without file storage.
     """
     
-    def __init__(self):
+    def __init__(self, name:str):
         # Define custom colors for different log levels
         self.log_colors = {
             'DEBUG': 'blue',
@@ -25,7 +25,7 @@ class AppLoggerService:
         }
         
         # Create the main logger
-        self.logger = logging.getLogger('MultiAgentSystem')
+        self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
         
         # Prevent propagation to root logger to avoid duplicates
@@ -164,5 +164,5 @@ def get_logger(name: str = None) -> AppLoggerService:
     """
     global _logger_instance
     if _logger_instance is None:
-        _logger_instance = AppLoggerService()
+        _logger_instance = AppLoggerService(name)
     return _logger_instance
