@@ -1,7 +1,6 @@
-import asyncio
 import json
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from openai import OpenAI
 from pydantic import BaseModel
@@ -9,7 +8,7 @@ from enum import Enum
 
 from mcp_client.client import create_mcp_client
 from util.logger import get_logger
-from config import OPENAI_CONFIG, MCP_CONFIG
+from config import OPENAI_CONFIG
 
 logger = get_logger(__name__)
     
@@ -27,6 +26,7 @@ class ReActStep:             # Represents one complete ReAct cycle
     thought : str
     action : str
     action_params: Dict[str, Any]
+    action_results: Dict[str, Any]
     observation: str
     reflection: str
     timestamp: datetime = datetime.now()
@@ -129,8 +129,8 @@ class WebResearchAgent:
             "original_query": task_query,
             "context": context or [],
             "search_results": [],
-            "analyzed_sources": [],
             "key_findings": [],
+            "analyzed_sources":[],
             "iteration": 0,
             "research_complete": False,
             "react_steps": []
@@ -186,6 +186,7 @@ class WebResearchAgent:
             thought=thought,
             action=f"{action_result['action_name']}({action_result['params']})",
             action_params=action_result['params'],
+            action_results=action_result["result"],
             observation=observation,
             reflection=reflection
         )
@@ -336,7 +337,7 @@ class WebResearchAgent:
         
         if research_state['key_findings']:
             summary_parts.append("Recent findings:")
-            for finding in research_state['key_findings'][-3:]:  # Last 3 findings
+            for finding in research_state['key_findings'][-5:]:  # Last 3 findings
                 summary_parts.append(f"  - {finding}")
         
         if research_state['react_steps']:
@@ -409,6 +410,8 @@ class WebResearchAgent:
                     new_results.append(search_result)
                     
                 research_state["search_results"].extend(new_results)
+                
+                
                 return {
                     "message": f"Found {len(new_results)} search results",
                     "results": [{"url": r.url, "title": r.title, "snippet": r.snippet} for r in new_results],
@@ -544,14 +547,7 @@ class WebResearchAgent:
             # Create final result object
             result = WebResearchResult(
                 query=research_state["original_query"],
-                search_results=[
-                    SearchResult(
-                        url=source.get("url", ""),
-                        title=source.get("title", ""),
-                        snippet="", 
-                        content=source.get("content", ""),
-                    ) for source in research_state["analyzed_sources"]
-                ],
+                search_results=research_state["search_results"],
                 summary=summary,
                 key_findings=research_state["key_findings"],
                 sources_analyzed=len(research_state["analyzed_sources"]),

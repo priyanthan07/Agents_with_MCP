@@ -15,7 +15,7 @@ from mcp.server.fastmcp import FastMCP
 from util.logger import get_logger
 from config import GEMINI_CONFIG, ASSEMBLYAI_CONFIG
 
-logger = get_logger(__name__)
+logger = get_logger("Multi-Modal")
 
 mcp = FastMCP("Multi-Modal Research MCP Server", port=8003)
 

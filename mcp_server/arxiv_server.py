@@ -20,14 +20,14 @@ logging.getLogger("uvicorn.error").setLevel(logging.ERROR)
 logging.getLogger("fastapi").setLevel(logging.ERROR)
 logging.getLogger("mcp").setLevel(logging.ERROR)
 
-logger = get_logger(__name__)
+logger = get_logger("ArxivServer")
 
 mcp = FastMCP("Comprehensive ArXiv Research Server", port=8002)
 
 @mcp.tool()
 def search_papers(query: str, max_results: int = 8) -> dict:
     try:
-        logger.info(f"Starting ArXiv search for query: '{query}' (max_results: {max_results})", context="ArXivServer")
+        logger.info(f"Starting ArXiv search for query: '{query}' (max_results: {max_results})")
         
         client = arxiv.Client()
         search = arxiv.Search(
@@ -51,7 +51,7 @@ def search_papers(query: str, max_results: int = 8) -> dict:
             }
             papers.append(paper_data)
         
-        logger.info(f"Successfully found {len(papers)} papers for query: '{query}'", context="ArXivServer")
+        logger.info(f"Successfully found {len(papers)} papers for query: '{query}'")
         
         return {
             "success": True,
@@ -64,7 +64,7 @@ def search_papers(query: str, max_results: int = 8) -> dict:
         }   
         
     except Exception as e:
-        logger.error(f"Failed to search papers for query '{query}': {str(e)}", context="ArXivServer")
+        logger.error(f"Failed to search papers for query '{query}': {str(e)}")
         return {
             "success": False,
             "error": str(e),
@@ -76,7 +76,7 @@ def search_papers(query: str, max_results: int = 8) -> dict:
 @mcp.tool()
 def get_paper_details(paper_ids: List[str]) -> dict:
     try:
-        logger.info(f"Retrieving details for {len(paper_ids)} papers", context="ArXivServer")
+        logger.info(f"Retrieving details for {len(paper_ids)} papers")
         
         client = arxiv.Client()
         paper_details = []
@@ -107,7 +107,7 @@ def get_paper_details(paper_ids: List[str]) -> dict:
                 paper_details.append(detailed_info)
             
             except Exception as paper_error:
-                logger.error(f"Failed to get details for paper {paper_id}: {str(paper_error)}", context="ArXivServer")
+                logger.error(f"Failed to get details for paper {paper_id}: {str(paper_error)}")
                 paper_details.append({
                     'paper_id': paper_id,
                     'error': str(paper_error),
@@ -115,7 +115,7 @@ def get_paper_details(paper_ids: List[str]) -> dict:
                 })
         
         successful_count = len([p for p in paper_details if 'error' not in p])     
-        logger.info(f"Successfully retrieved {successful_count}/{len(paper_ids)} paper details", context="ArXivServer") 
+        logger.info(f"Successfully retrieved {successful_count}/{len(paper_ids)} paper details") 
         
         return {
             "success": True,
@@ -125,7 +125,7 @@ def get_paper_details(paper_ids: List[str]) -> dict:
         }
         
     except Exception as e:
-        logger.error(f"Critical error retrieving paper details: {str(e)}", context="ArXivServer")
+        logger.error(f"Critical error retrieving paper details: {str(e)}")
         return {
             "success": False,
             "error": str(e),
@@ -134,13 +134,13 @@ def get_paper_details(paper_ids: List[str]) -> dict:
 
 def main():
     try:
-        logger.info("ArXiv MCP Server starting on port 8002", context="ArXivServer")
-        logger.info("Available tools: search_papers, get_paper_details", context="ArXivServer")
+        logger.info("ArXiv MCP Server starting on port 8002")
+        logger.info("Available tools: search_papers, get_paper_details")
         mcp.run(transport="streamable-http")
     except KeyboardInterrupt:
-        logger.info("ArXiv MCP Server stopped by user", context="ArXivServer")
+        logger.info("ArXiv MCP Server stopped by user")
     except Exception as e:
-        logger.error(f"Critical server error: {str(e)}", context="ArXivServer")
+        logger.error(f"Critical server error: {str(e)}")
         
 if __name__ == "__main__":
     main()

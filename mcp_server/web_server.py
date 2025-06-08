@@ -15,7 +15,7 @@ from util.logger import get_logger
 from config import TAVILY_CONFIG
 from tavily import AsyncTavilyClient
 
-logger = get_logger(__name__)
+logger = get_logger("WebServer")
 
 @dataclass
 class ToolResult:
