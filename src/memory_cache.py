@@ -44,34 +44,13 @@ class MemoryCacheLayer:
             port=CHROMA_CONFIG["chroma_port"]
         )
         
-        # openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-        #         api_key=OPENAI_CONFIG["api_key"],
-        #         model_name=OPENAI_CONFIG["embd_model"]
-        #     )
-        
         self.query_collection = self.chroma_client.get_or_create_collection(
             name="user_queries",
-            # embedding_function= openai_ef
         )
         
         self.similarity_threshold = 0.7
-        
         self.client = OpenAI(api_key=OPENAI_CONFIG["api_key"])
-        
         logger.info("Memory and caching layer initialized successfully")
-        
-    # async def _generate_embedding(self, text: str) -> List[float]:
-    #     try:
-    #         response = self.client.embeddings.create(
-    #             model="text-embedding-3-small",
-    #             input=text
-    #         )
-    #         return response.data[0].embedding
-            
-    #     except Exception as e:
-    #         logger.error(f"Error generating embedding: {e}")
-    #         # Return a zero vector as fallback
-    #         return [0.0] * 1536
     
     
     async def _get_redis_client(self) -> redis.Redis:

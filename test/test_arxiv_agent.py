@@ -77,7 +77,7 @@ class SimpleResearchTest:
             print(f"\n📝 Global Synthesis (Preview):")
             print("-" * 30)
             synthesis_preview = result.global_synthesis
-            print(result)
+            print(synthesis_preview)
             
             print("\n✅ Research method completed successfully!")
             

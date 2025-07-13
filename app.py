@@ -222,31 +222,31 @@ def main():
         
         with col2:
             text_report = f"""
-RESEARCH REPORT
-===============
-Query: {result.query}
-Date: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
-Sources: {result.sources_analyzed}
+                RESEARCH REPORT
+                ===============
+                Query: {result.query}
+                Date: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+                Sources: {result.sources_analyzed}
 
-EXECUTIVE SUMMARY
-================
-{result.executive_summary}
+                EXECUTIVE SUMMARY
+                ================
+                {result.executive_summary}
 
-DETAILED ANALYSIS
-================
-{result.detailed_analysis}
+                DETAILED ANALYSIS
+                ================
+                {result.detailed_analysis}
 
-WEB INSIGHTS
-============
-{chr(10).join([f"• {insight}" for insight in result.web_insights])}
+                WEB INSIGHTS
+                ============
+                {chr(10).join([f"• {insight}" for insight in result.web_insights])}
 
-ACADEMIC INSIGHTS
-=================
-{chr(10).join([f"• {insight}" for insight in result.academic_insights])}
+                ACADEMIC INSIGHTS
+                =================
+                {chr(10).join([f"• {insight}" for insight in result.academic_insights])}
 
-MEDIA INSIGHTS
-==============
-{chr(10).join([f"• {insight}" for insight in result.media_insights])}
+                MEDIA INSIGHTS
+                ==============
+                {chr(10).join([f"• {insight}" for insight in result.media_insights])}
             """
             
             st.download_button(

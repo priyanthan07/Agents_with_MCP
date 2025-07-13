@@ -92,6 +92,9 @@ class MultiModalResearchAgent:
         # Step 1: Scan directory for all files
         discovered_files = await self._scan_directory()
         
+        if discovered_files == []:
+            return self._create_empty_result(task_query)
+        
         # Step 2: Organize files by type
         files_by_type = self._organize_files_by_type(discovered_files)
         

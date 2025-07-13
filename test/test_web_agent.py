@@ -32,6 +32,8 @@ async def test_web_agent():
         print("🎉 RESEARCH COMPLETED!")
         print("=" * 50)
         
+        print(result)
+        
         print(f"Query: {result.query}")
         print(f"Research Depth: {result.research_depth}")
         print(f"Sources Analyzed: {result.sources_analyzed}")

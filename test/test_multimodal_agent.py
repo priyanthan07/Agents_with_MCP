@@ -21,7 +21,7 @@ async def test_multimodal_agent():
             return False
         
         # Run research
-        query = "Analyze all media content and extract key information"
+        query = "Analyze all media content and extract key information related to AI"
         result = await agent.research(query)
         
         # Display results

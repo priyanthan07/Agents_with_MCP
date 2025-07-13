@@ -4,7 +4,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 import json
-import mimetypes
+import logging
 from typing import Dict, List, Any
 from pathlib import Path
 from datetime import datetime
@@ -14,6 +14,13 @@ from google import genai
 from mcp.server.fastmcp import FastMCP
 from util.logger import get_logger
 from config import GEMINI_CONFIG, ASSEMBLYAI_CONFIG
+
+# Suppress all third-party logging to avoid duplicates
+logging.getLogger("uvicorn").setLevel(logging.ERROR)
+logging.getLogger("uvicorn.access").setLevel(logging.ERROR) 
+logging.getLogger("uvicorn.error").setLevel(logging.ERROR)
+logging.getLogger("fastapi").setLevel(logging.ERROR)
+logging.getLogger("mcp").setLevel(logging.ERROR)
 
 logger = get_logger("Multi-Modal")
 

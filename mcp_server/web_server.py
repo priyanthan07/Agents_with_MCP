@@ -16,14 +16,6 @@ from config import TAVILY_CONFIG
 from tavily import AsyncTavilyClient
 
 logger = get_logger("WebServer")
-
-@dataclass
-class ToolResult:
-    success: bool
-    data: Dict[str, Any]
-    error: Optional[str] = None
-    execution_time: float = 0.0
-    tool_name: str = ""
     
 mcp = FastMCP("ReAct Web Research Tools Server", port=8001)
 
