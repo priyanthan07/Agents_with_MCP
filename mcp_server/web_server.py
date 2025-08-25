@@ -109,7 +109,7 @@ async def analyze_webpage(url: str, extract_text: bool = True, summarize: bool =
                 "word_count": len(content.split()) if content else 0
             }
         else:
-            {
+            return {
                 "success": False,
                 "error": "No content extracted from URL",
                 "url": url
