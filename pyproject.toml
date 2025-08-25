@@ -12,6 +12,7 @@ dependencies = [
     "chroma>=0.2.0",
     "chromadb>=1.0.10",
     "colorlog>=6.9.0",
+    "fastmcp>=2.11.3",
     "google-genai>=1.18.0",
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.1",
@@ -20,4 +21,5 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "redis>=6.1.0",
     "streamlit>=1.45.1",
+    "tavily-python>=0.7.11",
 ]
